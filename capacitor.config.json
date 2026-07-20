@@ -1,0 +1,8 @@
+{
+  "appId": "com.fundkosh.app",
+  "appName": "FundKosh",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}
