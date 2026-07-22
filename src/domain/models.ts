@@ -1,13 +1,26 @@
-export type EntityType = 'user' | 'family' | 'merchant';
-export type EntityCategory = 'primary' | 'household' | 'essential' | 'impulsive';
+export type EntityType = 'user' | 'family' | 'merchant' | 'financial_institution' | 'gig_platform';
+export type PredictedCategory = 'essential' | 'impulsive' | 'transfers';
+export type RiskThemeState = 'GREEN' | 'AMBER' | 'RED';
+export type SpendState = 'SAFE' | 'VULNERABLE' | 'CRITICAL';
+export type WeatherCondition = 'CLEAR' | 'RAIN' | 'HEATWAVE';
+export type LocalEventVector = 'NORMAL' | 'FESTIVAL_SEASON' | 'IPL_MATCH_NIGHT';
 
 export interface Entity {
   id: string;
   name: string;
   type: EntityType;
-  category: EntityCategory;
   balance: number;
   upi_id: string;
+  phone?: string;
+}
+
+export interface Liability {
+  id: string;
+  entity_id: string;
+  title: string;
+  amount: number;
+  due_in_days: number;
+  is_active: boolean;
 }
 
 export type TransactionStatus = 
@@ -23,8 +36,12 @@ export interface Transaction {
   sender_upi: string;
   receiver_upi: string;
   amount: number;
+  round_up_amount: number;
   note?: string;
-  category: EntityCategory;
+  predicted_category: PredictedCategory;
+  is_impulsive: boolean;
+  risk_score: number; // 0 to 100
+  theme_state: RiskThemeState;
   status: TransactionStatus;
   speed_bump_reason?: string;
   timestamp: string; // ISO String
@@ -34,16 +51,68 @@ export interface SpeedBumpRule {
   id: string;
   name: string;
   description: string;
-  maxAmountThreshold?: number; // E.g., > 2000 INR triggers speed bump
-  flaggedCategories?: EntityCategory[]; // E.g., ['impulsive']
-  dailySpendLimit?: number; // E.g., > 10000 INR per day triggers speed bump
+  maxAmountThreshold?: number;
+  riskScoreThreshold?: number;
+  dailySpendLimit?: number;
   cooldownPeriodSeconds?: number;
   isActive: boolean;
 }
 
+export interface VaultState {
+  balance: number;
+  target_threshold: number;
+  total_swept: number;
+  flexi_rd_balance: number;
+  interest_rate: number;
+  total_sweeps_count: number;
+}
+
+export interface FlexiRDAccount {
+  account_id: string;
+  balance: number;
+  interest_rate: number; // e.g., 7.2%
+  total_sweeps_count: number;
+}
+
+export interface GigIncomePrediction {
+  baseMonthlyIncome: number;
+  weatherMultiplier: number;
+  weatherSurgeBonus: number;
+  eventMultiplier: number;
+  eventSurgeBonus: number;
+  totalPredictedMonthly: number;
+  predictedWeekly: number;
+}
+
+export interface DailyBudgetMetrics {
+  predictedMonthlyIncome: number;
+  totalActiveLiabilities: number;
+  netSpendablePool: number;
+  daysInMonth: number;
+  baselineDailySpend: number;
+  dailySpendableLimit: number;
+  todaySpent: number;
+  remainingDailyBudget: number;
+}
+
+export interface PredictiveUserState {
+  spendState: SpendState;
+  themeState: RiskThemeState;
+  temporalRiskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
+  reasons: string[];
+  availableCushion: number;
+  remainingDailyBudget: number;
+}
+
 export interface SpeedBumpEvaluationResult {
-  requiresSpeedBump: boolean;
+  predictedCategory: PredictedCategory;
+  isImpulsive: boolean;
   riskScore: number; // 0 to 100
+  requiresSpeedBump: boolean;
+  themeState: RiskThemeState;
   reasons: string[];
   suggestedCooldownSeconds: number;
+  roundUpAmount: number;
 }
+
+

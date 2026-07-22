@@ -1,16 +1,18 @@
 import Dexie, { Table } from 'dexie';
-import { Entity, Transaction, SpeedBumpRule } from '../domain/models';
+import { Entity, Liability, Transaction, SpeedBumpRule } from '../domain/models';
 
 export class FundKoshDatabase extends Dexie {
   entities!: Table<Entity, string>;
+  liabilities!: Table<Liability, string>;
   transactions!: Table<Transaction, string>;
   speed_bump_rules!: Table<SpeedBumpRule, string>;
 
   constructor() {
     super('FundKoshDB');
-    this.version(1).stores({
-      entities: 'id, &upi_id, type, category',
-      transactions: 'id, sender_upi, receiver_upi, status, category, timestamp',
+    this.version(2).stores({
+      entities: 'id, &upi_id, type',
+      liabilities: 'id, entity_id, is_active, due_in_days',
+      transactions: 'id, sender_upi, receiver_upi, status, predicted_category, is_impulsive, timestamp',
       speed_bump_rules: 'id, name, isActive'
     });
   }
@@ -23,7 +25,6 @@ export const SEED_ENTITIES: Entity[] = [
     id: 'usr_01',
     name: 'Aarav Sharma (Primary User)',
     type: 'user',
-    category: 'primary',
     balance: 50000,
     upi_id: 'aarav@fundkosh'
   },
@@ -31,7 +32,6 @@ export const SEED_ENTITIES: Entity[] = [
     id: 'fam_01',
     name: 'Priya Sharma (Spouse)',
     type: 'family',
-    category: 'household',
     balance: 15000,
     upi_id: 'priya@fundkosh'
   },
@@ -39,7 +39,6 @@ export const SEED_ENTITIES: Entity[] = [
     id: 'fam_02',
     name: 'Rohan Sharma (Child)',
     type: 'family',
-    category: 'household',
     balance: 2500,
     upi_id: 'rohan@fundkosh'
   },
@@ -47,7 +46,6 @@ export const SEED_ENTITIES: Entity[] = [
     id: 'mer_01',
     name: 'FreshMart Supermarket',
     type: 'merchant',
-    category: 'essential',
     balance: 120000,
     upi_id: 'freshmart@upi'
   },
@@ -55,7 +53,6 @@ export const SEED_ENTITIES: Entity[] = [
     id: 'mer_02',
     name: 'PowerGrid Electric Co',
     type: 'merchant',
-    category: 'essential',
     balance: 500000,
     upi_id: 'powergrid@upi'
   },
@@ -63,7 +60,6 @@ export const SEED_ENTITIES: Entity[] = [
     id: 'mer_03',
     name: 'GigaTech Electronics Store',
     type: 'merchant',
-    category: 'impulsive',
     balance: 350000,
     upi_id: 'gigatech@upi'
   },
@@ -71,7 +67,6 @@ export const SEED_ENTITIES: Entity[] = [
     id: 'mer_04',
     name: 'Vogue Apparel & Luxury',
     type: 'merchant',
-    category: 'impulsive',
     balance: 200000,
     upi_id: 'vogue@upi'
   },
@@ -79,25 +74,58 @@ export const SEED_ENTITIES: Entity[] = [
     id: 'mer_05',
     name: 'The Royal Spice Gourmet',
     type: 'merchant',
-    category: 'impulsive',
     balance: 95000,
     upi_id: 'royalspice@upi'
+  },
+  {
+    id: 'fin_01',
+    name: 'Hero FinCorp',
+    type: 'financial_institution',
+    balance: 1000000,
+    upi_id: 'herofincorp@upi'
+  }
+];
+
+export const SEED_LIABILITIES: Liability[] = [
+  {
+    id: 'liab_01',
+    entity_id: 'usr_01',
+    title: 'Bike Loan EMI',
+    amount: 1800,
+    due_in_days: 3,
+    is_active: true
+  },
+  {
+    id: 'liab_02',
+    entity_id: 'usr_01',
+    title: 'Apartment Rent',
+    amount: 12000,
+    due_in_days: 5,
+    is_active: true
+  },
+  {
+    id: 'liab_03',
+    entity_id: 'usr_01',
+    title: 'Electricity Utility Bill',
+    amount: 2500,
+    due_in_days: 10,
+    is_active: true
   }
 ];
 
 export const DEFAULT_SPEED_BUMP_RULES: SpeedBumpRule[] = [
   {
-    id: 'rule_impulsive_cat',
-    name: 'Impulsive Category Speed-Bump',
-    description: 'Intercepts payments made to impulsive categories (e.g., luxury electronics, fine dining, fast fashion).',
-    flaggedCategories: ['impulsive'],
+    id: 'rule_high_risk_ml',
+    name: 'Dynamic ML Impulsive Risk Threshold',
+    description: 'Intercepts payments dynamically categorized as impulsive when on-device ML risk score exceeds threshold.',
+    riskScoreThreshold: 45,
     cooldownPeriodSeconds: 10,
     isActive: true
   },
   {
     id: 'rule_high_value',
-    name: 'High-Value Payment Threshold',
-    description: 'Requires intentional reflection for transactions exceeding ₹2,000.',
+    name: 'High-Value Payment Guard',
+    description: 'Requires intentional reflection for single transactions exceeding ₹2,000.',
     maxAmountThreshold: 2000,
     cooldownPeriodSeconds: 5,
     isActive: true
@@ -113,10 +141,18 @@ export const DEFAULT_SPEED_BUMP_RULES: SpeedBumpRule[] = [
 ];
 
 export async function initializeDatabaseSeed(): Promise<void> {
-  const count = await db.entities.count();
-  if (count === 0) {
-    console.log('Seeding FundKosh DB with initial 8 entities and speed-bump rules...');
+  const entityCount = await db.entities.count();
+  if (entityCount === 0) {
+    console.log('Seeding FundKosh DB with initial entities, liabilities, and speed-bump rules...');
     await db.entities.bulkAdd(SEED_ENTITIES);
+    await db.liabilities.bulkAdd(SEED_LIABILITIES);
     await db.speed_bump_rules.bulkAdd(DEFAULT_SPEED_BUMP_RULES);
+  } else {
+    // Ensure liabilities exist if upgrading from v1
+    const liabCount = await db.liabilities.count();
+    if (liabCount === 0) {
+      await db.liabilities.bulkAdd(SEED_LIABILITIES);
+    }
   }
 }
+

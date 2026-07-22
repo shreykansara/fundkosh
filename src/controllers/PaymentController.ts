@@ -1,13 +1,15 @@
-import { Transaction, TransactionStatus, SpeedBumpEvaluationResult } from '../domain/models';
+import { Transaction, TransactionStatus, SpeedBumpEvaluationResult, WeatherCondition, LocalEventVector } from '../domain/models';
 import { IEntityRepository, EntityRepository } from '../data/repositories/EntityRepository';
 import { ITransactionRepository, TransactionRepository } from '../data/repositories/TransactionRepository';
 import { ISpeedBumpEvaluator, SpeedBumpEvaluator } from '../engine/SpeedBumpEvaluator';
+import { apiClient } from '../api/apiClient';
 
 export interface PaymentInitiationResult {
   status: TransactionStatus;
   transaction: Transaction;
   evaluationResult?: SpeedBumpEvaluationResult;
   errorMessage?: string;
+  vaultSwept?: boolean;
 }
 
 export class PaymentController {
@@ -18,7 +20,7 @@ export class PaymentController {
   constructor(
     entityRepo: IEntityRepository = new EntityRepository(),
     transactionRepo: ITransactionRepository = new TransactionRepository(),
-    speedBumpEvaluator: ISpeedBumpEvaluator = new SpeedBumpEvaluator(transactionRepo)
+    speedBumpEvaluator: ISpeedBumpEvaluator = new SpeedBumpEvaluator(entityRepo, transactionRepo)
   ) {
     this.entityRepo = entityRepo;
     this.transactionRepo = transactionRepo;
@@ -26,29 +28,37 @@ export class PaymentController {
   }
 
   /**
-   * Initiates payment flow and evaluates Speed-Bump rules.
+   * Initiates payment flow and evaluates Speed-Bump rules via dynamic prediction engine.
    */
   async initiatePayment(
     senderUpi: string,
     receiverUpi: string,
     amount: number,
-    note?: string
+    note?: string,
+    weather: WeatherCondition = 'CLEAR',
+    event: LocalEventVector = 'NORMAL'
   ): Promise<PaymentInitiationResult> {
     try {
       const sender = await this.entityRepo.getEntityByUpi(senderUpi);
       const receiver = await this.entityRepo.getEntityByUpi(receiverUpi);
 
-      if (!sender) {
-        throw new Error(`Sender account with UPI ID '${senderUpi}' does not exist.`);
-      }
-      if (!receiver) {
-        throw new Error(`Receiver account with UPI ID '${receiverUpi}' does not exist.`);
-      }
-      if (amount <= 0) {
-        throw new Error(`Invalid transaction amount ₹${amount}. Amount must be greater than zero.`);
-      }
-      if (sender.balance < amount) {
-        throw new Error(`Insufficient funds: Sender balance is ₹${sender.balance.toLocaleString()}, requested ₹${amount.toLocaleString()}.`);
+      if (!sender) throw new Error(`Sender account '${senderUpi}' does not exist.`);
+      if (!receiver) throw new Error(`Receiver account '${receiverUpi}' does not exist.`);
+      if (amount <= 0) throw new Error(`Amount must be greater than zero.`);
+
+      // Evaluate Speed-Bump Rules and dynamic transaction prediction
+      const evalResult = await this.speedBumpEvaluator.evaluateTransaction(
+        senderUpi,
+        receiverUpi,
+        amount,
+        note,
+        weather,
+        event
+      );
+
+      const totalDeduction = amount + evalResult.roundUpAmount;
+      if (sender.balance < totalDeduction) {
+        throw new Error(`Insufficient funds: Balance ₹${sender.balance.toLocaleString()}, required ₹${totalDeduction.toLocaleString()} (₹${amount} + ₹${evalResult.roundUpAmount} round-up).`);
       }
 
       const txId = 'tx_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
@@ -57,28 +67,21 @@ export class PaymentController {
         sender_upi: senderUpi,
         receiver_upi: receiverUpi,
         amount,
+        round_up_amount: evalResult.roundUpAmount,
         note,
-        category: receiver.category,
-        status: 'PENDING',
+        predicted_category: evalResult.predictedCategory,
+        is_impulsive: evalResult.isImpulsive,
+        risk_score: evalResult.riskScore,
+        theme_state: evalResult.themeState,
+        status: evalResult.requiresSpeedBump ? 'SPEED_BUMP_REQUIRED' : 'PENDING',
+        speed_bump_reason: evalResult.requiresSpeedBump ? evalResult.reasons.join(' | ') : undefined,
         timestamp: new Date().toISOString()
       };
 
-      // Store initial PENDING transaction
+      // Store transaction in audit ledger
       await this.transactionRepo.createTransaction(transaction);
 
-      // Evaluate Speed-Bump Rules
-      const evalResult = await this.speedBumpEvaluator.evaluateTransaction(
-        senderUpi,
-        receiver.category,
-        amount
-      );
-
       if (evalResult.requiresSpeedBump) {
-        const reasonStr = evalResult.reasons.join(' | ');
-        await this.transactionRepo.updateTransactionStatus(txId, 'SPEED_BUMP_REQUIRED', reasonStr);
-        transaction.status = 'SPEED_BUMP_REQUIRED';
-        transaction.speed_bump_reason = reasonStr;
-
         return {
           status: 'SPEED_BUMP_REQUIRED',
           transaction,
@@ -87,12 +90,13 @@ export class PaymentController {
       }
 
       // No Speed Bump required -> Execute Direct Transfer
-      await this.executeTransfer(transaction);
+      const transferRes = await this.executeTransfer(transaction);
       transaction.status = 'COMPLETED';
 
       return {
         status: 'COMPLETED',
-        transaction
+        transaction,
+        vaultSwept: transferRes.swept
       };
     } catch (err: any) {
       return {
@@ -102,8 +106,12 @@ export class PaymentController {
           sender_upi: senderUpi,
           receiver_upi: receiverUpi,
           amount,
+          round_up_amount: 0,
           note,
-          category: 'essential',
+          predicted_category: 'essential',
+          is_impulsive: false,
+          risk_score: 0,
+          theme_state: 'GREEN',
           status: 'FAILED',
           timestamp: new Date().toISOString()
         },
@@ -113,16 +121,14 @@ export class PaymentController {
   }
 
   /**
-   * Resolves an active Speed-Bump prompt when the user decides to CONFIRM (overriding or completing after delay) or CANCEL.
+   * Resolves an active Speed-Bump prompt when user decides to CONFIRM or CANCEL.
    */
   async resolveSpeedBump(
     transactionId: string,
     userChoice: 'CONFIRM' | 'CANCEL'
   ): Promise<PaymentInitiationResult> {
     const tx = await this.transactionRepo.getTransactionById(transactionId);
-    if (!tx) {
-      throw new Error(`Transaction '${transactionId}' not found.`);
-    }
+    if (!tx) throw new Error(`Transaction '${transactionId}' not found.`);
 
     if (tx.status !== 'SPEED_BUMP_REQUIRED' && tx.status !== 'PENDING') {
       throw new Error(`Transaction '${transactionId}' is in '${tx.status}' state and cannot be resolved.`);
@@ -135,23 +141,26 @@ export class PaymentController {
       return { status: 'BLOCKED', transaction: tx };
     }
 
-    // User confirmed -> Update to APPROVED and execute ledger transfer
+    // User confirmed -> Update to APPROVED and execute transfer
     await this.transactionRepo.updateTransactionStatus(transactionId, 'APPROVED');
     tx.status = 'APPROVED';
 
-    await this.executeTransfer(tx);
+    const transferRes = await this.executeTransfer(tx);
     tx.status = 'COMPLETED';
 
-    return { status: 'COMPLETED', transaction: tx };
+    return { status: 'COMPLETED', transaction: tx, vaultSwept: transferRes.swept };
   }
 
-  private async executeTransfer(tx: Transaction): Promise<void> {
+  private async executeTransfer(tx: Transaction): Promise<{ swept?: boolean }> {
     try {
-      await this.entityRepo.transferBalances(tx.sender_upi, tx.receiver_upi, tx.amount);
+      const res = await apiClient.executeTransfer(tx.sender_upi, tx.receiver_upi, tx.amount, tx.round_up_amount);
       await this.transactionRepo.updateTransactionStatus(tx.id, 'COMPLETED');
+      return { swept: res.swept };
     } catch (err: any) {
       await this.transactionRepo.updateTransactionStatus(tx.id, 'FAILED', err.message);
       throw err;
     }
   }
 }
+
+

@@ -1,281 +1,115 @@
-# FundKosh — On-Device Cash Management & Speed-Bump Engine
+# FundKosh — Cash Management & Speed-Bump Reflection Engine
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7.3-blue.svg)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-18.3.1-61dafb.svg)](https://reactjs.org/)
-[![Capacitor](https://img.shields.io/badge/Capacitor-6.0.0-119efd.svg)](https://capacitorjs.com/)
-[![Dexie.js](https://img.shields.io/badge/Dexie.js-4.0.10-38bdf8.svg)](https://dexie.org/)
+[![MongoDB](https://img.shields.io/badge/MongoDB-Local-green.svg)](https://www.mongodb.com/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-**FundKosh** is an on-device, privacy-compliant financial cash management mobile application built with **Capacitor** and **React + TypeScript**. It features an on-device state engine and real-time **Speed-Bump Evaluation Engine** that intercepts impulsive UPI payments before money leaves the user's account, providing psychological cooling periods and spend velocity safeguards.
+**FundKosh** is a premium cash management and real-time **Speed-Bump Intercept Reflection Engine** designed to prevent impulsive digital transactions (e.g. UPI) before funds leave a user's account. By enforcing custom cooldown periods and budget buffers, it provides a crucial cognitive reflection window for users.
 
 ---
 
 ## Technical Architecture & Core System Design
 
-FundKosh is designed following **Clean Architecture** principles and the **Repository Pattern**. All data persistence, rule evaluation, and transaction state transitions happen 100% locally on the user's device, ensuring **zero remote telemetry** and total financial privacy.
+FundKosh is designed around a **Client-Server Architecture** with a local Node.js Express backend and MongoDB database, falling back to a mock memory store if MongoDB is offline.
 
 ```
 +-----------------------------------------------------------------------+
-|                 Developer Verification Harness & UI                   |
+|                    Premium Mobile Client Interface                    |
 |                            (src/App.tsx)                              |
 +-----------------------------------------------------------------------+
                                    |
                                    v
 +-----------------------------------------------------------------------+
-|                    Payment Controller State Machine                   |
-|                (src/controllers/PaymentController.ts)                 |
+|                   Payment State Machine & Verification                |
+|                    (src/controllers/PaymentController)                |
 +-----------------------------------------------------------------------+
                                    |
                                    v
 +-----------------------------------------------------------------------+
-|                  Speed-Bump Real-Time Risk Engine                     |
-|                 (src/engine/SpeedBumpEvaluator.ts)                    |
+|                 Backend REST API Server (Port 5000)                   |
+|                        (server/index.js)                              |
 +-----------------------------------------------------------------------+
                                    |
                                    v
 +-----------------------------------------------------------------------+
-|                  Repository & Service Abstractions                    |
-|       (EntityRepository.ts  |  TransactionRepository.ts)             |
-+-----------------------------------------------------------------------+
-                                   |
-                                   v
-+-----------------------------------------------------------------------+
-|               Local Storage Engine (Dexie / SQLite)                   |
-|                       (src/data/database.ts)                          |
+|                     MongoDB Database Collection                       |
+|                          (fundkosh DB)                                |
 +-----------------------------------------------------------------------+
 ```
 
 ---
 
-## Component Deep Dive
+## Database Schema & Seed Profiles
 
-### 1. Data Layer & Schema (`src/data/database.ts`)
+### Database Tables (MongoDB Collections)
+1. **Entities**: Tracks accounts (types: `user`, `family`, `merchant`, `gig_platform`, `financial_institution`) with name, balance, UPI ID, and phone number.
+2. **Liabilities**: Upcoming fixed bills (rent, EMIs) to deduct from the daily spending limits.
+3. **Transactions**: Log of all completed, speed-bumped, or cancelled transfers.
+4. **Vaults**: Automated round-up settings and savings cache.
+5. **SpeedBumpRules**: ML parameters and limits governing cooldown interventions.
 
-FundKosh utilizes `Dexie.js` (IndexedDB abstraction with full TypeScript support), designed with an extensible repository pattern that enables seamless swapping with `@capacitor-community/sqlite` for native mobile storage.
+### Seed Dataset Profiles
+The database seeds the following profiles upon clicking **Reset / Seed DB** in the Developer Sandbox:
 
-#### Database Tables Schema
-
-```sql
--- Entities Table (Mock Bank Ledger)
-CREATE TABLE entities (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    type TEXT CHECK(type IN ('user', 'family', 'merchant')),
-    category TEXT CHECK(category IN ('primary', 'household', 'essential', 'impulsive')),
-    balance REAL NOT NULL,
-    upi_id TEXT UNIQUE NOT NULL
-);
-
--- Transactions Audit Ledger
-CREATE TABLE transactions (
-    id TEXT PRIMARY KEY,
-    sender_upi TEXT NOT NULL,
-    receiver_upi TEXT NOT NULL,
-    amount REAL NOT NULL,
-    note TEXT,
-    category TEXT NOT NULL,
-    status TEXT CHECK(status IN ('PENDING', 'SPEED_BUMP_REQUIRED', 'APPROVED', 'BLOCKED', 'COMPLETED', 'FAILED')),
-    speed_bump_reason TEXT,
-    timestamp TEXT NOT NULL
-);
-
--- Speed-Bump Rules Table
-CREATE TABLE speed_bump_rules (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    description TEXT NOT NULL,
-    maxAmountThreshold REAL,
-    flaggedCategories TEXT[],
-    dailySpendLimit REAL,
-    cooldownPeriodSeconds INTEGER,
-    isActive BOOLEAN NOT NULL
-);
-```
-
-#### Pre-Populated 8 Initial Entities
-
-The local database automatically seeds **8 pre-populated entities** upon initialization:
-
-| ID | Name | Entity Type | Category | Initial Balance | UPI ID |
+| ID | Name | Type | UPI ID | Phone Number | Initial Balance |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| `usr_01` | Aarav Sharma (Primary User) | `user` | `primary` | ₹50,000.00 | `aarav@fundkosh` |
-| `fam_01` | Priya Sharma (Spouse) | `family` | `household` | ₹15,000.00 | `priya@fundkosh` |
-| `fam_02` | Rohan Sharma (Child) | `family` | `household` | ₹2,500.00 | `rohan@fundkosh` |
-| `mer_01` | FreshMart Supermarket | `merchant` | `essential` | ₹120,000.00 | `freshmart@upi` |
-| `mer_02` | PowerGrid Electric Co | `merchant` | `essential` | ₹500,000.00 | `powergrid@upi` |
-| `mer_03` | GigaTech Electronics Store | `merchant` | `impulsive` | ₹350,000.00 | `gigatech@upi` |
-| `mer_04` | Vogue Apparel & Luxury | `merchant` | `impulsive` | ₹200,000.00 | `vogue@upi` |
-| `mer_05` | The Royal Spice Gourmet | `merchant` | `impulsive` | ₹95,000.00 | `royalspice@upi` |
+| `usr_01` | Ramesh Kumar | `user` | `rameshkumar@upi` | `+91 98290 12345` | ₹45,000.00 |
+| `usr_02` | Sunita Devi | `family` | `sunitadevi@upi` | `+91 94140 54321` | ₹15,000.00 |
+| `mer_01` | Balaji Stores (Grocery) | `merchant` | `balajistores@upi` | `+91 98870 99887` | ₹120,000.00 |
+| `mer_02` | Khurana Oil Co. (Petrol Pump) | `merchant` | `khuranaoil@upi` | `+91 94600 11223` | ₹500,000.00 |
+| `mer_03` | Pink City Sabji Bhandar | `merchant` | `pinkcitysabji@upi` | `+91 99280 44556` | ₹5,000.00 |
+| `mer_04` | Rawat Pyaaz Kachori Shop | `merchant` | `rawatkachori@upi` | `+91 98280 77889` | ₹35,000.00 |
+| `mer_05` | Sahu Tea Stall | `merchant` | `sahuteastall@upi` | `+91 94130 99001` | ₹12,000.00 |
 
 ---
 
-### 2. Repositories Layer (`src/data/repositories/`)
+## Core Features & Interfaces
 
-#### `EntityRepository.ts`
-Provides methods to query entities, update individual balances, and perform **atomic multi-account balance transfers**:
-- `transferBalances(senderUpi, receiverUpi, amount)`: Runs inside an isolated Dexie write transaction (`db.transaction('rw', db.entities, ...)`). Guarantees that sender debit and receiver credit occur atomically or roll back completely on failure.
+### 1. One-Step Profile Onboarding
+- When the app is launched without a session, the user is presented with a **Choose Your Profile** onboarding screen to login as **Ramesh Kumar** or **Sunita Devi**.
 
-#### `TransactionRepository.ts`
-Handles transaction persistence, status transitions, and analytical aggregate queries:
-- `getTodaySpendBySenderAndCategory(senderUpi, category)`: Calculates cumulative aggregate spend for a specific category within the current 24-hour window to enforce daily velocity caps.
+### 2. Recipient Verification Flow
+- Clicking any payment action opens the **Payment Modal**.
+- Entering a contact phone number or UPI ID and clicking **Verify** validates the contact details.
+- Valid users reveal a verified checkmark card before unlocking the amount inputs.
 
----
+### 3. Payment Status Screen
+- Displays a **Payment Successful** page upon transaction confirmation, showing Date, Time, Payee details, paid bank source, and scratch card rewards.
+- Displays a **Payment Failed** page if the transaction is cancelled or fails constraints.
 
-### 3. Speed-Bump Real-Time Risk Engine (`src/engine/SpeedBumpEvaluator.ts`)
-
-The `SpeedBumpEvaluator` evaluates every outgoing transfer request in real-time before balance deduction occurs.
-
-#### Evaluation Rules & Risk Scoring Algorithm
-
-```typescript
-riskScore = min(100, Σ Rule Risk Contributions)
-```
-
-1. **Impulsive Category Check**: If payee category is `'impulsive'`, adds **+45 Risk Points** and triggers speed-bump intercept.
-2. **High-Value Threshold Check**: If payment amount ≥ **₹2,000**, adds **+35 Risk Points** and triggers reflection delay.
-3. **Daily Spend Limit Check**: If today's aggregate impulsive spend + current amount ≥ **₹5,000**, adds **+40 Risk Points** and triggers speed-bump.
-4. **Cooldown Delay Calculation**: Sets `suggestedCooldownSeconds` (e.g., 5s to 15s) based on rule severity to force psychological cooling before enabling user override.
-
----
-
-### 4. Payment Controller & Transaction State Machine (`src/controllers/PaymentController.ts`)
-
-The `PaymentController` enforces the end-to-end payment state machine:
-
-```
-          +-----------------------+
-          |   Payment Initiated   |
-          +-----------------------+
-                      |
-                      v
-            [ Evaluated by Engine ]
-                      |
-         +------------+------------+
-         |                         |
- (No Speed Bump)           (Speed Bump Triggered)
-         |                         |
-         v                         v
-   +-----------+        +-----------------------+
-   | COMPLETED |        | SPEED_BUMP_REQUIRED   |
-   +-----------+        +-----------------------+
-                                   |
-                         [ User Intercept Choice ]
-                                   |
-                        +----------+----------+
-                        |                     |
-                   (User Confirm)        (User Cancel)
-                        |                     |
-                        v                     v
-                  +-----------+         +-----------+
-                  | COMPLETED |         |  BLOCKED  |
-                  +-----------+         +-----------+
-```
+### 4. Developer Sandbox Panel
+- A collapsible bottom tray toggled by the floating `?` support button on the bottom right.
+- Houses options to reset database seeds, adjust local weather conditions, or set local event vectors to stress test the spending propensity models.
 
 ---
 
 ## Getting Started
 
-### Prerequisites
-- Node.js (v18.0.0 or higher)
-- npm (v9.0.0 or higher)
-
 ### Installation
 
 ```bash
-# Clone the repository
-git clone https://github.com/shreykansara/fundkosh.git
-cd fundkosh/App
-
-# Install dependencies
+# Install root node dependencies
 npm install
+
+# Install server backend dependencies
+cd server
+npm install
+cd ..
 ```
 
-### Running Locally in Development Mode
+### Running Locally
 
-```bash
-npm run dev
-```
-Open `http://localhost:3000` in your web browser to access the Developer Testing Harness.
+You will need to run both the API backend and Vite client frontend:
 
-### Building for Production
+1. **Start the API Server**:
+   ```bash
+   node .\server\index.js
+   ```
+   (Runs on http://localhost:5000)
 
-```bash
-npm run build
-```
-
----
-
-## Mobile Deployment with Capacitor
-
-FundKosh is packaged using **Capacitor** to target native Android and iOS devices.
-
-### Add Native Platforms
-
-```bash
-# Build production assets
-npm run build
-
-# Add Android project
-npx cap add android
-
-# Add iOS project
-npx cap add ios
-```
-
-### Sync Web Build to Native Containers
-
-```bash
-npx cap sync
-```
-
-### Open Native IDE
-
-```bash
-# Open in Android Studio
-npx cap open android
-
-# Open in Xcode
-npx cap open ios
-```
-
----
-
-## File Structure
-
-```
-App/
-├── capacitor.config.json    # Capacitor container configuration
-├── index.html               # Main HTML entrypoint
-├── package.json             # Dependencies and scripts
-├── tsconfig.json            # TypeScript configuration
-├── vite.config.ts           # Vite bundler configuration
-└── src/
-    ├── main.tsx             # Application DOM mount
-    ├── App.tsx              # Developer Verification Harness & Speed-Bump UI
-    ├── controllers/
-    │   └── PaymentController.ts  # Payment lifecycle state machine
-    ├── data/
-    │   ├── database.ts      # Dexie DB schema & initial seed data (8 entities)
-    │   └── repositories/
-    │       ├── EntityRepository.ts       # Account balance & transfer repo
-    │       └── TransactionRepository.ts  # Transaction log & spend query repo
-    ├── domain/
-    │   └── models.ts        # Domain interfaces, enums, & types
-    └── engine/
-        └── SpeedBumpEvaluator.ts # Real-time speed-bump evaluation engine
-```
-
----
-
-## Privacy & Security Statement
-
-FundKosh operates under a **Strict On-Device Privacy Architecture**:
-- All financial records, entities, and transaction logs remain encrypted inside the device's native SQLite/IndexedDB container.
-- Zero network requests are made during Speed-Bump evaluation or transaction execution.
-- Speed-bump algorithms execute locally in real time without third-party server telemetry.
-
----
-
-## License
-
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+2. **Start the Vite Frontend**:
+   ```bash
+   npm run dev
+   ```
+   (Runs on http://localhost:5173 or configured dev port)
