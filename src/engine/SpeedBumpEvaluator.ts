@@ -10,14 +10,13 @@ import { DailyBudgetCalculator } from './DailyBudgetCalculator';
 import { EntityRepository, IEntityRepository } from '../data/repositories/EntityRepository';
 import { TransactionRepository, ITransactionRepository } from '../data/repositories/TransactionRepository';
 import { LiabilityRepository, ILiabilityRepository } from '../data/repositories/LiabilityRepository';
-import { apiClient } from '../api/apiClient';
 
 export interface ISpeedBumpEvaluator {
   evaluateTransaction(
     senderUpi: string,
     receiverUpi: string,
     amount: number,
-    note?: string,
+    note?: 'essential' | 'impulsive' | 'other' | string,
     weather?: WeatherCondition,
     event?: LocalEventVector
   ): Promise<SpeedBumpEvaluationResult>;
@@ -63,7 +62,7 @@ export class SpeedBumpEvaluator implements ISpeedBumpEvaluator {
     senderUpi: string,
     receiverUpi: string,
     amount: number,
-    note: string = '',
+    note: 'essential' | 'impulsive' | 'other' | string = 'other',
     weather: WeatherCondition = 'CLEAR',
     event: LocalEventVector = 'NORMAL'
   ): Promise<SpeedBumpEvaluationResult> {
@@ -71,21 +70,26 @@ export class SpeedBumpEvaluator implements ISpeedBumpEvaluator {
     const receiver = await this.entityRepo.getEntityByUpi(receiverUpi);
 
     const userState = await this.statePredictor.predictUserState(senderUpi);
-    const budgetMetrics = await this.budgetCalculator.calculateMetrics(senderUpi, weather, event);
+    const budgetMetrics = await this.budgetCalculator.calculateMetrics(
+      senderUpi, 
+      sender?.id || 'usr_01', 
+      weather, 
+      event
+    );
 
     // Spare change round up calculation to nearest ₹10
     const nextMultipleOf10 = Math.ceil(amount / 10) * 10;
     const roundUpAmount = nextMultipleOf10 > amount ? nextMultipleOf10 - amount : 0;
 
     const lowerNote = note.toLowerCase();
-    const hasImpulsiveKw = IMPULSIVE_KEYWORDS.some(kw => lowerNote.includes(kw));
-    const hasEssentialKw = ESSENTIAL_KEYWORDS.some(kw => lowerNote.includes(kw));
+    const hasImpulsiveKw = lowerNote === 'impulsive' || IMPULSIVE_KEYWORDS.some(kw => lowerNote.includes(kw));
+    const hasEssentialKw = lowerNote === 'essential' || ESSENTIAL_KEYWORDS.some(kw => lowerNote.includes(kw));
     const hasTransferKw = TRANSFER_KEYWORDS.some(kw => lowerNote.includes(kw));
 
     let predictedCategory: PredictedCategory = 'essential';
-    if (receiver?.type === 'family' || hasTransferKw) {
+    if (receiver?.type === 0 || hasTransferKw) {
       predictedCategory = 'transfers';
-    } else if (hasImpulsiveKw || (receiver?.type === 'merchant' && (amount >= 2000 || userState.spendState === 'VULNERABLE'))) {
+    } else if (hasImpulsiveKw || (receiver?.type === 1 && (amount >= 2000 || userState.spendState === 'VULNERABLE'))) {
       predictedCategory = 'impulsive';
     } else if (hasEssentialKw) {
       predictedCategory = 'essential';
@@ -93,7 +97,7 @@ export class SpeedBumpEvaluator implements ISpeedBumpEvaluator {
       predictedCategory = amount > 1500 ? 'impulsive' : 'essential';
     }
 
-    const isImpulsive = predictedCategory === 'impulsive';
+    let isImpulsive = predictedCategory === 'impulsive';
     const reasons: string[] = [];
     let riskScore = 0;
 
@@ -115,8 +119,12 @@ export class SpeedBumpEvaluator implements ISpeedBumpEvaluator {
       reasons.push(...userState.reasons);
     }
 
-    // Rules evaluation from DB
-    const rules = await apiClient.getRules();
+    // Hardcoded rules evaluation (as speedbumprules collection is removed)
+    const rules = [
+      { id: 'rule_high_risk_ml', name: 'Dynamic Impulse Vulnerability Rule', riskScoreThreshold: 45, cooldownPeriodSeconds: 10, isActive: true },
+      { id: 'rule_high_value', name: 'High-Value Payment Guard', maxAmountThreshold: 2000, cooldownPeriodSeconds: 5, isActive: true },
+      { id: 'rule_daily_limit', name: 'Daily Budget Exceeded Guard', dailySpendLimit: 5000, cooldownPeriodSeconds: 15, isActive: true }
+    ];
     let maxCooldown = 0;
     let ruleTriggered = false;
 
@@ -149,10 +157,18 @@ export class SpeedBumpEvaluator implements ISpeedBumpEvaluator {
       themeState = 'RED';
     }
 
-    const requiresSpeedBump = themeState !== 'GREEN' || ruleTriggered;
-    const suggestedCooldownSeconds = requiresSpeedBump 
-      ? (themeState === 'RED' ? Math.max(10, maxCooldown) : Math.max(5, maxCooldown))
-      : 0;
+    let requiresSpeedBump = themeState !== 'GREEN' || ruleTriggered;
+    let suggestedCooldownSeconds = requiresSpeedBump ? 3 : 0;
+
+    if (note === 'essential' || note === 'emi') {
+      requiresSpeedBump = false;
+      suggestedCooldownSeconds = 0;
+      themeState = 'GREEN';
+      predictedCategory = 'essential';
+      isImpulsive = false;
+      riskScore = 0;
+      reasons.length = 0;
+    }
 
     return {
       predictedCategory,
@@ -166,5 +182,3 @@ export class SpeedBumpEvaluator implements ISpeedBumpEvaluator {
     };
   }
 }
-
-

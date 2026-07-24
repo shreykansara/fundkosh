@@ -1,23 +1,22 @@
-import { VaultState, FlexiRDAccount } from '../../domain/models';
+import { VaultState } from '../../domain/models';
 import { apiClient } from '../../api/apiClient';
 
 export interface IVaultRepository {
-  getVault(): Promise<VaultState>;
-  updateTargetThreshold(threshold: number): Promise<VaultState>;
-  manualSweep(): Promise<VaultState>;
+  getVault(userUpi?: string): Promise<VaultState>;
+  updateTargetThreshold(userUpi: string, threshold: number): Promise<VaultState>;
+  manualSweep(userUpi: string): Promise<VaultState>;
 }
 
 export class VaultRepository implements IVaultRepository {
-  async getVault(): Promise<VaultState> {
-    return await apiClient.getVault();
+  async getVault(userUpi?: string): Promise<VaultState> {
+    return await apiClient.getVault(userUpi);
   }
 
-
-  async updateTargetThreshold(threshold: number): Promise<VaultState> {
-    return await apiClient.updateVaultThreshold(threshold);
+  async updateTargetThreshold(userUpi: string, threshold: number): Promise<VaultState> {
+    return await apiClient.updateVaultThreshold(userUpi, threshold);
   }
 
-  async manualSweep(): Promise<VaultState> {
-    return await apiClient.manualSweepVault();
+  async manualSweep(userUpi: string): Promise<VaultState> {
+    return await apiClient.manualSweepVault(userUpi);
   }
 }

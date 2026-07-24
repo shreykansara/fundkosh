@@ -28,15 +28,30 @@ export class PaymentController {
   }
 
   /**
+   * Evaluates the speed bump rules for a transaction without executing it.
+   */
+  async evaluatePayment(
+    senderUpi: string,
+    receiverUpi: string,
+    amount: number,
+    note?: 'essential' | 'impulsive' | 'other' | 'emi',
+    weather: WeatherCondition = 'CLEAR',
+    event: LocalEventVector = 'NORMAL'
+  ): Promise<SpeedBumpEvaluationResult> {
+    return this.speedBumpEvaluator.evaluateTransaction(senderUpi, receiverUpi, amount, note, weather, event);
+  }
+
+  /**
    * Initiates payment flow and evaluates Speed-Bump rules via dynamic prediction engine.
    */
   async initiatePayment(
     senderUpi: string,
     receiverUpi: string,
     amount: number,
-    note?: string,
+    note?: 'essential' | 'impulsive' | 'other' | 'emi',
     weather: WeatherCondition = 'CLEAR',
-    event: LocalEventVector = 'NORMAL'
+    event: LocalEventVector = 'NORMAL',
+    bypassSpeedBump: boolean = false
   ): Promise<PaymentInitiationResult> {
     try {
       const sender = await this.entityRepo.getEntityByUpi(senderUpi);
@@ -56,6 +71,11 @@ export class PaymentController {
         event
       );
 
+      const originalRequiresSpeedBump = evalResult.requiresSpeedBump;
+      if (bypassSpeedBump) {
+        evalResult.requiresSpeedBump = false;
+      }
+
       const totalDeduction = amount + evalResult.roundUpAmount;
       if (sender.balance < totalDeduction) {
         throw new Error(`Insufficient funds: Balance ₹${sender.balance.toLocaleString()}, required ₹${totalDeduction.toLocaleString()} (₹${amount} + ₹${evalResult.roundUpAmount} round-up).`);
@@ -67,14 +87,10 @@ export class PaymentController {
         sender_upi: senderUpi,
         receiver_upi: receiverUpi,
         amount,
-        round_up_amount: evalResult.roundUpAmount,
         note,
-        predicted_category: evalResult.predictedCategory,
-        is_impulsive: evalResult.isImpulsive,
         risk_score: evalResult.riskScore,
-        theme_state: evalResult.themeState,
         status: evalResult.requiresSpeedBump ? 'SPEED_BUMP_REQUIRED' : 'PENDING',
-        speed_bump_reason: evalResult.requiresSpeedBump ? evalResult.reasons.join(' | ') : undefined,
+        speed_bump_reason: originalRequiresSpeedBump ? evalResult.reasons.join(' | ') : undefined,
         timestamp: new Date().toISOString()
       };
 
@@ -106,12 +122,8 @@ export class PaymentController {
           sender_upi: senderUpi,
           receiver_upi: receiverUpi,
           amount,
-          round_up_amount: 0,
           note,
-          predicted_category: 'essential',
-          is_impulsive: false,
           risk_score: 0,
-          theme_state: 'GREEN',
           status: 'FAILED',
           timestamp: new Date().toISOString()
         },
@@ -153,7 +165,9 @@ export class PaymentController {
 
   private async executeTransfer(tx: Transaction): Promise<{ swept?: boolean }> {
     try {
-      const res = await apiClient.executeTransfer(tx.sender_upi, tx.receiver_upi, tx.amount, tx.round_up_amount);
+      const nextMultipleOf10 = Math.ceil(tx.amount / 10) * 10;
+      const roundUpAmount = nextMultipleOf10 > tx.amount ? nextMultipleOf10 - tx.amount : 0;
+      const res = await apiClient.executeTransfer(tx.sender_upi, tx.receiver_upi, tx.amount, roundUpAmount);
       await this.transactionRepo.updateTransactionStatus(tx.id, 'COMPLETED');
       return { swept: res.swept };
     } catch (err: any) {

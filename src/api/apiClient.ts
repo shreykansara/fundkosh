@@ -1,4 +1,4 @@
-import { Entity, Liability, Transaction, VaultState, SpeedBumpRule, TransactionStatus } from '../domain/models';
+import { Entity, Liability, Transaction, VaultState, TransactionStatus } from '../domain/models';
 
 const API_BASE = 'http://localhost:5000/api';
 
@@ -40,21 +40,12 @@ export const apiClient = {
     }
   },
 
-  async getVault(): Promise<VaultState & { flexi_rd_balance: number; interest_rate: number; total_sweeps_count: number }> {
+  async getVault(userUpi?: string): Promise<VaultState & { flexi_rd_balance: number; interest_rate: number; total_sweeps_count: number }> {
     try {
-      const res = await fetch(`${API_BASE}/vault`);
+      const res = await fetch(`${API_BASE}/vault?upi=${userUpi || ''}`);
       return await res.json();
     } catch {
       return { balance: 0, target_threshold: 100, total_swept: 0, flexi_rd_balance: 0, interest_rate: 7.2, total_sweeps_count: 0 };
-    }
-  },
-
-  async getRules(): Promise<SpeedBumpRule[]> {
-    try {
-      const res = await fetch(`${API_BASE}/rules`);
-      return await res.json();
-    } catch {
-      return [];
     }
   },
 
@@ -96,17 +87,39 @@ export const apiClient = {
     return await res.json();
   },
 
-  async updateVaultThreshold(targetThreshold: number): Promise<VaultState> {
+  async updateVaultThreshold(userUpi: string, targetThreshold: number): Promise<VaultState> {
     const res = await fetch(`${API_BASE}/vault/update-threshold`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ targetThreshold })
+      body: JSON.stringify({ upi: userUpi, targetThreshold })
     });
     return await res.json();
   },
 
-  async manualSweepVault(): Promise<VaultState> {
-    const res = await fetch(`${API_BASE}/vault/manual-sweep`, { method: 'POST' });
+  async manualSweepVault(userUpi: string): Promise<VaultState> {
+    const res = await fetch(`${API_BASE}/vault/manual-sweep`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ upi: userUpi })
+    });
+    return await res.json();
+  },
+
+  async createEntity(entity: Omit<Entity, 'id'>): Promise<Entity> {
+    const res = await fetch(`${API_BASE}/entities/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(entity)
+    });
+    return await res.json();
+  },
+
+  async payLiability(senderUpi: string, liabilityId: string): Promise<{ success: boolean; user: Entity }> {
+    const res = await fetch(`${API_BASE}/liabilities/pay`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ senderUpi, liabilityId })
+    });
     return await res.json();
   }
 };

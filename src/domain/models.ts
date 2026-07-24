@@ -1,9 +1,18 @@
-export type EntityType = 'user' | 'family' | 'merchant' | 'financial_institution' | 'gig_platform';
+export type EntityType = 0 | 1; // 0 = user, 1 = merchant
 export type PredictedCategory = 'essential' | 'impulsive' | 'transfers';
 export type RiskThemeState = 'GREEN' | 'AMBER' | 'RED';
 export type SpendState = 'SAFE' | 'VULNERABLE' | 'CRITICAL';
 export type WeatherCondition = 'CLEAR' | 'RAIN' | 'HEATWAVE';
 export type LocalEventVector = 'NORMAL' | 'FESTIVAL_SEASON' | 'IPL_MATCH_NIGHT';
+
+export interface EmbeddedLiability {
+  id: string;
+  title: string;
+  amount: number;
+  period_days: number;
+  last_paid_date: string; // ISO string YYYY-MM-DD
+  is_active: boolean;
+}
 
 export interface Entity {
   id: string;
@@ -12,6 +21,8 @@ export interface Entity {
   balance: number;
   upi_id: string;
   phone?: string;
+  liabilities?: EmbeddedLiability[];
+  vault?: VaultState;
 }
 
 export interface Liability {
@@ -36,12 +47,8 @@ export interface Transaction {
   sender_upi: string;
   receiver_upi: string;
   amount: number;
-  round_up_amount: number;
-  note?: string;
-  predicted_category: PredictedCategory;
-  is_impulsive: boolean;
+  note?: 'essential' | 'impulsive' | 'other' | 'emi';
   risk_score: number; // 0 to 100
-  theme_state: RiskThemeState;
   status: TransactionStatus;
   speed_bump_reason?: string;
   timestamp: string; // ISO String
@@ -114,5 +121,3 @@ export interface SpeedBumpEvaluationResult {
   suggestedCooldownSeconds: number;
   roundUpAmount: number;
 }
-
-

@@ -6,6 +6,7 @@ import {
 import { 
   Entity, 
   Liability, 
+  EmbeddedLiability,
   Transaction, 
   SpeedBumpEvaluationResult, 
   WeatherCondition, 
@@ -54,7 +55,8 @@ import {
   Sparkle,
   ArrowLeft,
   Check,
-  Award
+  Award,
+  X
 } from 'lucide-react';
 
 const paymentController = new PaymentController();
@@ -75,6 +77,39 @@ function AppContent() {
   const [showSandbox, setShowSandbox] = useState(false);
   const [showBalance, setShowBalance] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [paymentMode, setPaymentMode] = useState<'PHONE' | 'UPI'>('UPI');
+  const [isEnteringUpiPin, setIsEnteringUpiPin] = useState(false);
+  const [upiPin, setUpiPin] = useState('');
+  const [showPin, setShowPin] = useState(false);
+  const [bypassSpeedBump, setBypassSpeedBump] = useState(false);
+  const [optInRoundUp, setOptInRoundUp] = useState(true);
+  const [showEmiPopup, setShowEmiPopup] = useState(false);
+  const [selectedLiabilityId, setSelectedLiabilityId] = useState<string>('');
+  const [currentEmiLiability, setCurrentEmiLiability] = useState<EmbeddedLiability | null>(null);
+
+  // Create New Account Wizard States
+  const [showCreateAccountWizard, setShowCreateAccountWizard] = useState(false);
+  const [wizardStep, setWizardStep] = useState(1);
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserPhone, setNewUserPhone] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpValue, setOtpValue] = useState('');
+  const [isOtpVerified, setIsOtpVerified] = useState(false);
+  const [selectedBank, setSelectedBank] = useState('Small Finance Bank');
+  const [isSmsVerifying, setIsSmsVerifying] = useState(false);
+  const [smsVerificationMessage, setSmsVerificationMessage] = useState('');
+  
+  const [newUserIncome, setNewUserIncome] = useState<number>(30000);
+  const [newUserThreshold, setNewUserThreshold] = useState<number>(100);
+  const [customLiabilities, setCustomLiabilities] = useState<{
+    title: string;
+    amount: number;
+    period_days: number;
+    last_paid_date: string;
+  }[]>([
+    { title: '', amount: 0, period_days: 30, last_paid_date: new Date().toISOString().split('T')[0] }
+  ]);
+  const [isPersonalizing, setIsPersonalizing] = useState(false);
 
   // Verification & Payment Result Status State
   const [verificationQuery, setVerificationQuery] = useState('');
@@ -90,13 +125,19 @@ function AppContent() {
     errorMessage?: string;
   } | null>(null);
 
-  const handleOpenPaymentModal = () => {
+  const handleOpenPaymentModal = (mode: 'PHONE' | 'UPI') => {
+    setPaymentMode(mode);
     setVerificationQuery('');
     setVerifiedRecipient(null);
     setVerificationError(null);
     setPaymentResult(null);
     setAmount(0);
-    setNote('');
+    setNote('other');
+    setIsEnteringUpiPin(false);
+    setOptInRoundUp(true);
+    setShowEmiPopup(false);
+    setSelectedLiabilityId('');
+    setCurrentEmiLiability(null);
     setIsPaymentModalOpen(true);
   };
 
@@ -105,14 +146,18 @@ function AppContent() {
     setVerifiedRecipient(null);
     const query = verificationQuery.trim().toLowerCase();
     if (!query) {
-      setVerificationError('Please enter a phone number or UPI ID');
+      setVerificationError(paymentMode === 'PHONE' ? 'Please enter a phone number' : 'Please enter a UPI ID');
       return;
     }
-    // Scan entities for match
-    const matched = entities.find(e => 
-      e.upi_id.toLowerCase() === query || 
-      (e.phone && e.phone.replace(/[\s\-\+]/g, '').endsWith(query.replace(/[\s\-\+]/g, '')))
-    );
+    
+    let matched: Entity | undefined;
+    if (paymentMode === 'PHONE') {
+      matched = entities.find(e => 
+        e.phone && e.phone.replace(/[\s\-\+]/g, '').endsWith(query.replace(/[\s\-\+]/g, ''))
+      );
+    } else {
+      matched = entities.find(e => e.upi_id.toLowerCase() === query);
+    }
 
     if (matched) {
       if (matched.upi_id === senderUpi) {
@@ -122,7 +167,9 @@ function AppContent() {
       setVerifiedRecipient(matched);
       setReceiverUpi(matched.upi_id);
     } else {
-      setVerificationError('Recipient not found in directory. Please verify credentials.');
+      setVerificationError(paymentMode === 'PHONE' 
+        ? 'Phone number not found in directory. Please verify credentials.' 
+        : 'UPI ID not found in directory. Please verify credentials.');
     }
   };
 
@@ -130,7 +177,7 @@ function AppContent() {
   const [senderUpi, setSenderUpi] = useState('');
   const [receiverUpi, setReceiverUpi] = useState('gigatech@upi');
   const [amount, setAmount] = useState<number>(1500);
-  const [note, setNote] = useState('Wireless Earbuds');
+  const [note, setNote] = useState<'essential' | 'impulsive' | 'other' | 'emi'>('other');
 
   // External Vectors
   const [weather, setWeather] = useState<WeatherCondition>('CLEAR');
@@ -160,26 +207,42 @@ function AppContent() {
     const health = await apiClient.checkHealth();
     setMongoConnected(health.mongoConnected);
 
+    const activeUpi = currentUser?.upi_id || senderUpi;
     const [e, l, t, v] = await Promise.all([
       apiClient.getEntities(),
       apiClient.getLiabilities(),
       apiClient.getTransactions(),
-      apiClient.getVault()
+      apiClient.getVault(activeUpi)
     ]);
 
     setEntities(e);
     setLiabilities(l);
     setTransactions(t);
-    setVaultData(v);
+    
+    const updatedUser = e.find(ent => ent.upi_id === activeUpi);
+    if (updatedUser) {
+      setCurrentUser(updatedUser);
+      if (updatedUser.vault) {
+        setVaultData(updatedUser.vault);
+      } else {
+        setVaultData(v);
+      }
+    } else {
+      setVaultData(v);
+    }
     setIsDbReady(true);
 
-    const activeUpi = currentUser?.upi_id || senderUpi;
     if (activeUpi) {
       // Proactive Launch State Prediction
       const state = await statePredictor.predictUserState(activeUpi);
       setUserState(state);
 
-      const bMetrics = await budgetCalculator.calculateMetrics(activeUpi, weather, eventVector);
+      const bMetrics = await budgetCalculator.calculateMetrics(
+        activeUpi, 
+        currentUser?.id || 'usr_01', 
+        weather, 
+        eventVector
+      );
       setBudgetMetrics(bMetrics);
 
       // Sync App Baseline Theme to Launch State
@@ -224,11 +287,100 @@ function AppContent() {
     return () => clearInterval(timer);
   }, [cooldownLeft]);
 
-  const handleSendPayment = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // SMS verification hook for onboarding wizard
+  useEffect(() => {
+    if (isSmsVerifying) {
+      setSmsVerificationMessage('Initiating secure bank SMS handshake...');
+      const t1 = setTimeout(() => {
+        setSmsVerificationMessage('Verifying credentials with SMS token...');
+      }, 700);
+      const t2 = setTimeout(() => {
+        setSmsVerificationMessage('Bank Account linked successfully!');
+      }, 1400);
+      const t3 = setTimeout(() => {
+        setIsSmsVerifying(false);
+        setWizardStep(2);
+      }, 2100);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+      };
+    }
+  }, [isSmsVerifying]);
+
+  const handleSendPayment = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (amount <= 0) return;
     setStatusMessage(null);
 
-    const result = await paymentController.initiatePayment(senderUpi, receiverUpi, amount, note, weather, eventVector);
+    try {
+      const evalResult = await paymentController.evaluatePayment(
+        senderUpi,
+        receiverUpi,
+        amount,
+        note,
+        weather,
+        eventVector
+      );
+
+      if (evalResult.requiresSpeedBump) {
+        setActiveSpeedBump({
+          tx: {
+            id: 'temp_eval_' + Date.now(),
+            sender_upi: senderUpi,
+            receiver_upi: receiverUpi,
+            amount,
+            note,
+            risk_score: evalResult.riskScore,
+            status: 'SPEED_BUMP_REQUIRED',
+            speed_bump_reason: evalResult.reasons.join(' | '),
+            timestamp: new Date().toISOString()
+          },
+          evalResult
+        });
+        setCooldownLeft(evalResult.suggestedCooldownSeconds);
+        setStatusMessage('⚡ Speed-Bump Intercept Triggered! Take a moment to reflect.');
+      } else {
+        setBypassSpeedBump(false);
+        setIsEnteringUpiPin(true);
+        setUpiPin('');
+      }
+    } catch (err: any) {
+      setStatusMessage(`❌ Evaluation Error: ${err.message || 'Failed to check payment security.'}`);
+    }
+  };
+
+  const handleKeypadPress = (key: string) => {
+    if (key === 'backspace') {
+      setUpiPin(prev => prev.slice(0, -1));
+    } else if (key === 'confirm') {
+      if (upiPin.length === 6) {
+        setIsEnteringUpiPin(false);
+        executePayment();
+      }
+    } else if (['—', '↵'].includes(key)) {
+      // no op
+    } else {
+      if (upiPin.length < 6) {
+        setUpiPin(prev => prev + key);
+      }
+    }
+  };
+
+  const executePayment = async () => {
+    setStatusMessage(null);
+
+    const result = await paymentController.initiatePayment(
+      senderUpi,
+      receiverUpi,
+      amount,
+      note,
+      weather,
+      eventVector,
+      bypassSpeedBump,
+      optInRoundUp
+    );
 
     if (result.status === 'SPEED_BUMP_REQUIRED' && result.evaluationResult) {
       setActiveSpeedBump({
@@ -238,11 +390,26 @@ function AppContent() {
       setCooldownLeft(result.evaluationResult.suggestedCooldownSeconds);
       setStatusMessage('⚡ Speed-Bump Intercept Triggered! Take a moment to reflect.');
     } else if (result.status === 'COMPLETED') {
-      let msg = `✅ Payment of ₹${amount.toLocaleString()} completed! (Round-Up: ₹${result.transaction.round_up_amount} → Vault).`;
+      const nextMultipleOf10 = Math.ceil(amount / 10) * 10;
+      const roundUp = (optInRoundUp && nextMultipleOf10 > amount) ? nextMultipleOf10 - amount : 0;
+      let msg = `✅ Payment of ₹${amount.toLocaleString()} completed!`;
+      if (roundUp > 0) {
+        msg += ` (Round-Up: ₹${roundUp} → Vault).`;
+      }
       if (result.vaultSwept) {
         msg += ` 🐖 Vault reached target threshold & auto-swept to 7.2% Flexi-RD!`;
       }
       setStatusMessage(msg);
+
+      // If this was an EMI payment, update the liability last paid date on the server
+      if (note === 'emi' && currentEmiLiability) {
+        try {
+          await apiClient.payLiability(senderUpi, currentEmiLiability.id);
+        } catch (err) {
+          console.error("Failed to update liability last paid date", err);
+        }
+      }
+
       setPaymentResult({
         status: 'SUCCESS',
         txId: result.transaction.id,
@@ -277,44 +444,15 @@ function AppContent() {
   const handleResolveSpeedBump = async (choice: 'CONFIRM' | 'CANCEL') => {
     if (!activeSpeedBump) return;
 
-    const res = await paymentController.resolveSpeedBump(activeSpeedBump.tx.id, choice);
     setActiveSpeedBump(null);
 
-    if (res.status === 'COMPLETED') {
-      let msg = `✅ Payment confirmed after Speed-Bump reflection! (Round-Up: ₹${res.transaction.round_up_amount} → Vault).`;
-      if (res.vaultSwept) {
-        msg += ` 🐖 Vault auto-swept to 7.2% Flexi-RD!`;
-      }
-      setStatusMessage(msg);
-      setPaymentResult({
-        status: 'SUCCESS',
-        txId: res.transaction.id,
-        amount: res.transaction.amount,
-        payeeName: verifiedRecipient ? verifiedRecipient.name : res.transaction.receiver_upi.split('@')[0],
-        payeeUpi: res.transaction.receiver_upi,
-        timestamp: Date.now()
-      });
-      setIsPaymentModalOpen(true);
-
-      const updatedEntities = await apiClient.getEntities();
-      const updatedMe = updatedEntities.find(ent => ent.upi_id === senderUpi);
-      if (updatedMe) {
-        setCurrentUser(updatedMe);
-      }
-    } else if (res.status === 'BLOCKED') {
-      setStatusMessage(`🛑 Payment cancelled. Funds preserved safely!`);
-      setPaymentResult({
-        status: 'FAILED',
-        txId: activeSpeedBump.tx.id,
-        amount: activeSpeedBump.tx.amount,
-        payeeName: verifiedRecipient ? verifiedRecipient.name : activeSpeedBump.tx.receiver_upi.split('@')[0],
-        payeeUpi: activeSpeedBump.tx.receiver_upi,
-        timestamp: Date.now(),
-        errorMessage: 'Payment cancelled during reflection cooldown.'
-      });
-      setIsPaymentModalOpen(true);
+    if (choice === 'CANCEL') {
+      setStatusMessage('🛑 Payment cancelled. Funds preserved safely!');
+    } else {
+      setBypassSpeedBump(true);
+      setIsEnteringUpiPin(true);
+      setUpiPin('');
     }
-    refreshAppData();
   };
 
   const handleSeedDatabase = async () => {
@@ -326,9 +464,64 @@ function AppContent() {
   };
 
   const handleManualSweep = async () => {
-    await apiClient.manualSweepVault();
-    await refreshAppData();
-    setStatusMessage('🐖 Manual sweep executed! All spare change moved to 7.2% Flexi-RD.');
+    if (currentUser?.upi_id) {
+      await apiClient.manualSweepVault(currentUser.upi_id);
+      await refreshAppData();
+      setStatusMessage('🐖 Manual sweep executed! All spare change moved to 7.2% Flexi-RD.');
+    }
+  };
+
+  const handleCreateAccount = async () => {
+    setIsPersonalizing(true);
+    setWizardStep(5);
+    
+    try {
+      const firstPart = newUserName.trim().split(' ')[0].toLowerCase();
+      const upiId = `${firstPart}${Math.floor(100 + Math.random() * 900)}@upi`;
+      
+      const userLiabs = customLiabilities
+        .filter(l => l.title.trim() && l.amount > 0)
+        .map(l => ({
+          id: 'liab_' + Math.random().toString(36).substring(2, 9),
+          title: l.title.trim(),
+          amount: l.amount,
+          period_days: l.period_days,
+          last_paid_date: l.last_paid_date,
+          is_active: true
+        }));
+
+      const createdUser = await apiClient.createEntity({
+        name: newUserName.trim(),
+        type: 0, // 0 = user
+        balance: 25000,
+        upi_id: upiId,
+        phone: newUserPhone.trim(),
+        liabilities: userLiabs,
+        vault: {
+          balance: 0,
+          target_threshold: newUserThreshold,
+          total_swept: 0,
+          flexi_rd_balance: 0,
+          interest_rate: 7.2,
+          total_sweeps_count: 0
+        }
+      });
+
+      setTimeout(async () => {
+        setIsPersonalizing(false);
+        setShowCreateAccountWizard(false);
+        setWizardStep(1);
+        
+        await refreshAppData();
+        setCurrentUser(createdUser);
+        setStatusMessage(`🎉 Welcome ${newUserName}! Your FundKosh account is linked and personalized.`);
+      }, 2500);
+
+    } catch (err) {
+      console.error(err);
+      setIsPersonalizing(false);
+      setStatusMessage('❌ Failed to link bank account. Please verify API server status.');
+    }
   };
 
   if (!isDbReady) {
@@ -344,62 +537,467 @@ function AppContent() {
   if (!currentUser) {
     return (
       <div style={{ ...styles.appShell, background: themeColors.bgGradient, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: 20 }}>
-        <div style={{ textAlign: 'center', marginBottom: 30 }}>
+        <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <h1 style={{ ...styles.title, fontSize: 36, color: '#006C49' }}>FundKosh</h1>
           <p style={{ ...styles.description, fontSize: 14 }}>Dynamic Cash Management & Sahayak Friction Engine</p>
         </div>
 
-        <div style={styles.card}>
-          <h2 style={{ ...styles.cardTitle, fontSize: 18, marginBottom: 6, textAlign: 'center' }}>Choose Your Profile</h2>
-          <p style={{ ...styles.description, textAlign: 'center', marginBottom: 20 }}>Select a user account to experience customized daily budgets and auto spare-change sweeps.</p>
-          
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {entities.filter(e => e.type === 'user' || e.type === 'family').map(user => (
-              <div 
-                key={user.id} 
-                onClick={() => {
-                  setCurrentUser(user);
-                }}
-                style={{ 
-                  ...styles.entityItem, 
-                  cursor: 'pointer', 
-                  border: '1px solid #e2e8f0', 
-                  padding: '16px', 
-                  borderRadius: 12,
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.01)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
+        {!showCreateAccountWizard ? (
+          /* PROFILE SELECTION SCREEN */
+          <div style={styles.card}>
+            <h2 style={{ ...styles.cardTitle, fontSize: 18, marginBottom: 6, textAlign: 'center' }}>Choose Your Profile</h2>
+            <p style={{ ...styles.description, textAlign: 'center', marginBottom: 20 }}>Select a user account to experience customized daily budgets and auto spare-change sweeps.</p>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {entities.filter(e => e.type === 0).map(user => (
+                <div 
+                  key={user.id} 
+                  onClick={() => {
+                    setCurrentUser(user);
+                  }}
+                  style={{ 
+                    ...styles.entityItem, 
+                    cursor: 'pointer', 
+                    border: '1px solid #e2e8f0', 
+                    padding: '16px', 
+                    borderRadius: 12,
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.01)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ 
+                      width: 40, 
+                      height: 40, 
+                      borderRadius: '50%', 
+                      backgroundColor: '#006C49', 
+                      color: '#ffffff', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center',
+                      fontWeight: 700,
+                      fontSize: 16
+                    }}>
+                      {user.name[0]}
+                    </div>
+                    <div>
+                      <span style={{ ...styles.entityName, fontSize: 14 }}>{user.name}</span>
+                      <span style={{ ...styles.upiText, fontSize: 11, marginTop: 2 }}>{user.upi_id}</span>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <span style={{ fontSize: 10, color: '#64748b', display: 'block' }}>Balance</span>
+                    <span style={{ ...styles.balanceText, fontSize: 14 }}>₹{user.balance.toLocaleString()}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ borderTop: '1px solid #e2e8f0', marginTop: 16, paddingTop: 16 }}>
+              <button 
+                onClick={() => setShowCreateAccountWizard(true)}
+                style={{
+                  ...styles.submitBtn, 
+                  backgroundColor: '#006C49', 
+                  width: '100%', 
+                  fontSize: 14, 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  gap: 6 
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ 
-                    width: 40, 
-                    height: 40, 
-                    borderRadius: '50%', 
-                    backgroundColor: '#006C49', 
-                    color: '#ffffff', 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'center',
-                    fontWeight: 700,
-                    fontSize: 16
-                  }}>
-                    {user.name[0]}
-                  </div>
-                  <div>
-                    <span style={{ ...styles.entityName, fontSize: 14 }}>{user.name}</span>
-                    <span style={{ ...styles.upiText, fontSize: 11, marginTop: 2 }}>{user.upi_id}</span>
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ fontSize: 10, color: '#64748b', display: 'block' }}>Balance</span>
-                  <span style={{ ...styles.balanceText, fontSize: 14 }}>₹{user.balance.toLocaleString()}</span>
+                ➕ Create New User Account
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* CREATE USER ACCOUNT MULTI-STEP WIZARD */
+          <div style={styles.card}>
+            
+            {/* Header and Back Button */}
+            {wizardStep < 5 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+                <button 
+                  onClick={() => {
+                    if (wizardStep === 1) {
+                      setShowCreateAccountWizard(false);
+                    } else {
+                      setWizardStep(prev => prev - 1);
+                    }
+                  }} 
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}
+                >
+                  <ArrowLeft size={18} color="#006C49" />
+                </button>
+                <div style={{ flex: 1 }}>
+                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#0f172a' }}>
+                    Step {wizardStep} of 4
+                  </h3>
+                  <span style={{ fontSize: 11, color: '#64748b' }}>
+                    {wizardStep === 1 ? 'Dummy Account Linking' : wizardStep === 2 ? 'Monthly Earnings' : wizardStep === 3 ? 'Fixed Monthly Bills' : 'Flexi-RD Setup'}
+                  </span>
                 </div>
               </div>
-            ))}
+            )}
+
+            {/* STEP 1: DUMMY ACCOUNT LINKING */}
+            {wizardStep === 1 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>Full Name</label>
+                  <input 
+                    type="text" 
+                    value={newUserName}
+                    onChange={e => setNewUserName(e.target.value)}
+                    placeholder="e.g. Rajesh Sharma"
+                    style={styles.input}
+                    required
+                  />
+                </div>
+
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>Phone Number</label>
+                  <input 
+                    type="text" 
+                    value={newUserPhone}
+                    onChange={e => setNewUserPhone(e.target.value)}
+                    placeholder="e.g. 98290 55667"
+                    style={styles.input}
+                    required
+                  />
+                </div>
+
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>Select Bank Account</label>
+                  <select 
+                    value={selectedBank} 
+                    onChange={e => setSelectedBank(e.target.value)}
+                    style={styles.input}
+                  >
+                    <option value="Small Finance Bank">Small Finance Bank (Recommended)</option>
+                    <option value="State Bank of India">State Bank of India</option>
+                    <option value="HDFC Bank">HDFC Bank</option>
+                    <option value="ICICI Bank">ICICI Bank</option>
+                  </select>
+                </div>
+
+                {otpSent && !isOtpVerified && (
+                  <div style={styles.formGroup}>
+                    <label style={styles.label}>Enter 4-Digit OTP (Sent to Phone)</label>
+                    <input 
+                      type="text" 
+                      value={otpValue}
+                      onChange={e => setOtpValue(e.target.value)}
+                      placeholder="e.g. 1234"
+                      maxLength={4}
+                      style={{ ...styles.input, textAlign: 'center', letterSpacing: '4px', fontWeight: 'bold' }}
+                    />
+                  </div>
+                )}
+
+                {isSmsVerifying && (
+                  <div style={{ 
+                    textAlign: 'center', 
+                    padding: 16, 
+                    backgroundColor: '#f0fdf4', 
+                    borderRadius: 10, 
+                    border: '1px solid #bbf7d0',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 10
+                  }}>
+                    <Activity className="animate-spin" size={24} color="#16a34a" />
+                    <span style={{ fontSize: 12, fontWeight: 600, color: '#16a34a' }}>
+                      {smsVerificationMessage}
+                    </span>
+                  </div>
+                )}
+
+                {!isSmsVerifying && (
+                  <div style={{ marginTop: 8 }}>
+                    {!otpSent ? (
+                      <button
+                        onClick={() => {
+                          if (!newUserName.trim() || !newUserPhone.trim()) {
+                            alert('Please fill in your name and phone number.');
+                            return;
+                          }
+                          setOtpSent(true);
+                          setOtpValue('1234'); // Auto fill verification OTP value
+                        }}
+                        style={{ ...styles.submitBtn, backgroundColor: '#006C49', width: '100%' }}
+                      >
+                        Send Verification OTP
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          if (otpValue.length < 4) {
+                            alert('Please enter the 4-digit OTP.');
+                            return;
+                          }
+                          setIsOtpVerified(true);
+                          setIsSmsVerifying(true);
+                        }}
+                        style={{ ...styles.submitBtn, backgroundColor: '#16a34a', width: '100%' }}
+                      >
+                        Verify OTP & Link Bank
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* STEP 2: AVERAGE MONTHLY INCOME */}
+            {wizardStep === 2 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div style={{ textAlign: 'center', margin: '8px 0' }}>
+                  <span style={{ fontSize: 24, fontWeight: 800, color: '#006C49' }}>💵 Monthly Earnings</span>
+                  <p style={{ ...styles.description, marginTop: 4 }}>Enter your average monthly take-home income or salary.</p>
+                </div>
+
+                <div style={styles.formGroup}>
+                  <label style={styles.label}>Average Monthly Income (₹)</label>
+                  <input 
+                    type="number" 
+                    value={newUserIncome === 0 ? '' : newUserIncome}
+                    onChange={e => setNewUserIncome(Number(e.target.value))}
+                    placeholder="e.g. 35000"
+                    style={styles.input}
+                    min={1000}
+                    required
+                  />
+                </div>
+
+                <button
+                  onClick={() => {
+                    if (newUserIncome < 1000) {
+                      alert('Please enter a valid monthly income.');
+                      return;
+                    }
+                    setWizardStep(3);
+                  }}
+                  style={{ ...styles.submitBtn, backgroundColor: '#006C49', width: '100%' }}
+                >
+                  Next: Fixed Payments ➔
+                </button>
+              </div>
+            )}
+
+            {/* STEP 3: FIXED MONTHLY PAYMENTS */}
+            {wizardStep === 3 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ textAlign: 'center', marginBottom: 6 }}>
+                  <span style={{ fontSize: 24, fontWeight: 800, color: '#991b1b' }}>💳 Fixed Payments</span>
+                  <p style={{ ...styles.description, marginTop: 4 }}>Add your active EMIs, rent, subscriptions, or family allowance payouts.</p>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 340, overflowY: 'auto', paddingRight: 4 }}>
+                  {customLiabilities.map((liab, idx) => (
+                    <div key={idx} style={{ 
+                      backgroundColor: '#f8fafc', 
+                      borderRadius: 12, 
+                      padding: 12, 
+                      border: '1px solid #e2e8f0', 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      gap: 8,
+                      position: 'relative'
+                    }}>
+                      {customLiabilities.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = customLiabilities.filter((_, i) => i !== idx);
+                            setCustomLiabilities(updated);
+                          }}
+                          style={{
+                            position: 'absolute',
+                            top: 8,
+                            right: 8,
+                            background: 'none',
+                            border: 'none',
+                            color: '#ef4444',
+                            cursor: 'pointer',
+                            fontSize: 13,
+                            fontWeight: 'bold',
+                            padding: 4
+                          }}
+                        >
+                          ✕ Remove
+                        </button>
+                      )}
+
+                      <div style={{ display: 'flex', gap: 8, marginTop: customLiabilities.length > 1 ? 24 : 0 }}>
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <label style={{ fontSize: 10, color: '#475569', fontWeight: 600 }}>Title</label>
+                          <input 
+                            type="text" 
+                            value={liab.title}
+                            onChange={e => {
+                              const updated = [...customLiabilities];
+                              updated[idx].title = e.target.value;
+                              setCustomLiabilities(updated);
+                            }}
+                            placeholder="e.g. Rent"
+                            style={{ ...styles.input, padding: '8px' }}
+                          />
+                        </div>
+                        <div style={{ width: '100px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <label style={{ fontSize: 10, color: '#475569', fontWeight: 600 }}>Amount (₹)</label>
+                          <input 
+                            type="number" 
+                            value={liab.amount === 0 ? '' : liab.amount}
+                            onChange={e => {
+                              const updated = [...customLiabilities];
+                              updated[idx].amount = Number(e.target.value);
+                              setCustomLiabilities(updated);
+                            }}
+                            placeholder="Amount"
+                            style={{ ...styles.input, padding: '8px' }}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <label style={{ fontSize: 10, color: '#475569', fontWeight: 600 }}>Period (Days)</label>
+                          <input 
+                            type="number" 
+                            value={liab.period_days}
+                            onChange={e => {
+                              const updated = [...customLiabilities];
+                              updated[idx].period_days = Number(e.target.value);
+                              setCustomLiabilities(updated);
+                            }}
+                            placeholder="e.g. 30"
+                            style={{ ...styles.input, padding: '8px' }}
+                          />
+                        </div>
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <label style={{ fontSize: 10, color: '#475569', fontWeight: 600 }}>Last Paid Date</label>
+                          <input 
+                            type="date" 
+                            value={liab.last_paid_date}
+                            onChange={e => {
+                              const updated = [...customLiabilities];
+                              updated[idx].last_paid_date = e.target.value;
+                              setCustomLiabilities(updated);
+                            }}
+                            style={{ ...styles.input, padding: '8px' }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setCustomLiabilities([...customLiabilities, { title: '', amount: 0, period_days: 30, last_paid_date: new Date().toISOString().split('T')[0] }])}
+                  style={{
+                    backgroundColor: '#f1f5f9',
+                    color: '#006C49',
+                    border: '1px dashed #006C49',
+                    borderRadius: 8,
+                    padding: '8px',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    marginTop: 4
+                  }}
+                >
+                  ➕ Add Another Fixed Expense
+                </button>
+
+                <button
+                  onClick={() => setWizardStep(4)}
+                  style={{ ...styles.submitBtn, backgroundColor: '#006C49', width: '100%', marginTop: 12 }}
+                >
+                  Next: Setup Flexi-RD ➔
+                </button>
+              </div>
+            )}
+
+            {/* STEP 4: FLEXI-RD SETUP */}
+            {wizardStep === 4 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div style={{ textAlign: 'center', marginBottom: 6 }}>
+                  <span style={{ fontSize: 24, fontWeight: 800, color: '#006C49' }}>🐖 Flexi-RD Setup</span>
+                  <p style={{ ...styles.description, marginTop: 4 }}>Configure your automated round-up savings and sweep threshold.</p>
+                </div>
+
+                <div style={{ backgroundColor: '#f8fafc', borderRadius: 12, padding: 16, border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>Auto-Sweep Threshold</span>
+                  <span style={{ fontSize: 11, color: '#64748b', lineHeight: 1.4 }}>
+                    Choose the amount at which your accumulated spare change will be automatically swept into your 7.2% interest Flexi-RD.
+                  </span>
+                  
+                  <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                    {[100, 150, 200, 500].map(val => (
+                      <button
+                        key={val}
+                        type="button"
+                        onClick={() => setNewUserThreshold(val)}
+                        style={{
+                          flex: 1,
+                          padding: '10px 0',
+                          borderRadius: 8,
+                          border: newUserThreshold === val ? '2px solid #006C49' : '1px solid #cbd5e1',
+                          backgroundColor: newUserThreshold === val ? '#E6F4EA' : '#ffffff',
+                          color: newUserThreshold === val ? '#006C49' : '#475569',
+                          fontWeight: 700,
+                          fontSize: 12,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ₹{val}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleCreateAccount}
+                  style={{ ...styles.submitBtn, backgroundColor: '#16a34a', width: '100%', marginTop: 8 }}
+                >
+                  Personalize my FundKosh ➔
+                </button>
+              </div>
+            )}
+
+            {/* STEP 5: PERSONALIZATION LOADING */}
+            {wizardStep === 5 && (
+              <div style={{ 
+                textAlign: 'center', 
+                padding: '24px 12px', 
+                display: 'flex', 
+                flexDirection: 'column', 
+                alignItems: 'center', 
+                gap: 16 
+              }}>
+                <Sparkles className="animate-pulse" size={48} color="#006C49" />
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#006C49' }}>
+                    Personalizing FundKosh...
+                  </h3>
+                  <p style={{ ...styles.description, marginTop: 6, fontSize: 12, lineHeight: '1.5' }}>
+                    Recalculating daily limits and setting up your Sahayak Assistant cognitive friction models...
+                  </p>
+                </div>
+                <div style={{ width: '100%', height: 4, backgroundColor: '#f1f5f9', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: '70%', backgroundColor: '#006C49', borderRadius: 2 }} className="animate-bounce" />
+                </div>
+              </div>
+            )}
+            
           </div>
-        </div>
+        )}
       </div>
     );
   }
@@ -430,7 +1028,7 @@ function AppContent() {
           </div>
           <div>
             <h1 style={{ fontSize: 16, fontWeight: 700, color: '#006C49', margin: 0 }}>
-              Ram Ram, {currentUser.name.split(' ')[0]} Ji!
+              Namaste, {currentUser.name.split(' ')[0]} Ji!
             </h1>
             <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginTop: 2 }}>
               <MapPin size={12} color="#64748b" />
@@ -443,9 +1041,6 @@ function AppContent() {
           <span style={{ ...styles.themeStateChip, backgroundColor: themeColors.badgeBg, color: themeColors.textColor, fontSize: 9 }}>
             🛡️ {themeState}
           </span>
-          <button style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer' }}>
-            <Bell size={22} color="#006C49" />
-          </button>
         </div>
       </header>
 
@@ -512,7 +1107,7 @@ function AppContent() {
 
             {/* Scan QR Code Button */}
             <button 
-              onClick={handleOpenPaymentModal}
+              onClick={() => handleOpenPaymentModal('UPI')}
               style={{
                 width: '100%',
                 backgroundColor: '#16a34a',
@@ -537,7 +1132,7 @@ function AppContent() {
 
             {/* Quick Actions Icon Row */}
             <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', margin: '8px 0 8px 0' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer' }} onClick={handleOpenPaymentModal}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer' }} onClick={() => handleOpenPaymentModal('PHONE')}>
                 <div style={{ 
                   width: 56, 
                   height: 56, 
@@ -554,7 +1149,7 @@ function AppContent() {
                 <span style={{ fontSize: 11, fontWeight: 600, color: '#0f172a' }}>To Contact</span>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer' }} onClick={handleOpenPaymentModal}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer' }} onClick={() => handleOpenPaymentModal('UPI')}>
                 <div style={{ 
                   width: 56, 
                   height: 56, 
@@ -571,21 +1166,21 @@ function AppContent() {
                 <span style={{ fontSize: 11, fontWeight: 600, color: '#0f172a' }}>To UPI ID</span>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer' }} onClick={handleOpenPaymentModal}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, opacity: 0.5, cursor: 'not-allowed' }}>
                 <div style={{ 
                   width: 56, 
                   height: 56, 
                   borderRadius: '50%', 
-                  backgroundColor: '#16a34a', 
+                  backgroundColor: '#64748b', 
                   display: 'flex', 
                   alignItems: 'center', 
                   justifyContent: 'center', 
                   color: '#ffffff',
-                  boxShadow: '0 4px 12px rgba(22, 163, 74, 0.15)'
+                  boxShadow: 'none'
                 }}>
                   <Wallet size={22} />
                 </div>
-                <span style={{ fontSize: 11, fontWeight: 600, color: '#0f172a' }}>Self-Transfer</span>
+                <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>Self-Transfer</span>
               </div>
             </div>
 
@@ -655,130 +1250,7 @@ function AppContent() {
               </div>
             </div>
 
-            {/* Rider Bachat Deals Section */}
-            <div style={{ marginBottom: 8 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: '#006C49', margin: 0 }}>
-                  Rider Bachat Deals
-                </h3>
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', cursor: 'pointer' }}>
-                  VIEW ALL
-                </span>
-              </div>
 
-              <div style={{ 
-                display: 'flex', 
-                overflowX: 'auto', 
-                gap: 12, 
-                paddingBottom: 8,
-                scrollSnapType: 'x mandatory',
-                WebkitOverflowScrolling: 'touch'
-              }}>
-                {/* Deal Card 1 */}
-                <div style={{ 
-                  flex: '0 0 240px',
-                  backgroundColor: '#ffffff',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: 12,
-                  padding: 12,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 10,
-                  boxShadow: '0 2px 6px rgba(0,0,0,0.01)'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div>
-                      <h4 style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', margin: 0 }}>
-                        ₹ 50 Off Engine Oil
-                      </h4>
-                      <span style={{ fontSize: 11, color: '#64748b', display: 'block', marginTop: 2 }}>
-                        Mansarovar Service Center
-                      </span>
-                    </div>
-                    <div style={{ 
-                      width: 32, 
-                      height: 32, 
-                      borderRadius: 8, 
-                      backgroundColor: '#E6F4EA', 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'center',
-                      color: '#006C49'
-                    }}>
-                      <Coins size={16} />
-                    </div>
-                  </div>
-                  <button 
-                    onClick={() => setStatusMessage('🎟️ Voucher Claimed! Show the code at Mansarovar Service Center.')}
-                    style={{
-                      width: '100%',
-                      backgroundColor: '#16a34a',
-                      color: '#ffffff',
-                      border: 'none',
-                      borderRadius: 8,
-                      padding: '8px',
-                      fontSize: 12,
-                      fontWeight: 700,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Claim Voucher
-                  </button>
-                </div>
-
-                {/* Deal Card 2 */}
-                <div style={{ 
-                  flex: '0 0 240px',
-                  backgroundColor: '#ffffff',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: 12,
-                  padding: 12,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 10,
-                  boxShadow: '0 2px 6px rgba(0,0,0,0.01)'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div>
-                      <h4 style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', margin: 0 }}>
-                        Free Bike Wash
-                      </h4>
-                      <span style={{ fontSize: 11, color: '#64748b', display: 'block', marginTop: 2 }}>
-                        Jaipur Moto Cleaners
-                      </span>
-                    </div>
-                    <div style={{ 
-                      width: 32, 
-                      height: 32, 
-                      borderRadius: 8, 
-                      backgroundColor: '#E6F4EA', 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'center',
-                      color: '#006C49'
-                    }}>
-                      <Coins size={16} />
-                    </div>
-                  </div>
-                  <button 
-                    onClick={() => setStatusMessage('🎟️ Wash Voucher Claimed! Present at Jaipur Moto Cleaners.')}
-                    style={{
-                      width: '100%',
-                      backgroundColor: '#16a34a',
-                      color: '#ffffff',
-                      border: 'none',
-                      borderRadius: 8,
-                      padding: '8px',
-                      fontSize: 12,
-                      fontWeight: 700,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Claim Voucher
-                  </button>
-                </div>
-              </div>
-            </div>
 
             {statusMessage && (
               <div style={styles.notification}>
@@ -813,7 +1285,7 @@ function AppContent() {
                 <div>
                   <h3 style={{ ...styles.cardTitle, fontSize: 16, marginBottom: 4 }}>{currentUser.name}</h3>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    <span style={getTypeStyle(currentUser.type)}>{currentUser.type.toUpperCase()}</span>
+                    <span style={getTypeStyle(currentUser.type)}>{currentUser.type === 0 ? 'USER' : 'MERCHANT'}</span>
                     <span style={{ fontSize: 11, color: '#64748b' }}>{currentUser.upi_id}</span>
                   </div>
                 </div>
@@ -895,7 +1367,7 @@ function AppContent() {
                 <h2 style={styles.cardTitle}>Upcoming Fixed Obligations</h2>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {liabilities.map(liab => (
+                {liabilities.filter(liab => liab.entity_id === currentUser.id).map(liab => (
                   <div key={liab.id} style={styles.liabItem}>
                     <div>
                       <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{liab.title}</span>
@@ -912,41 +1384,108 @@ function AppContent() {
 
         {/* TAB 3: VAULT & FLEXI-RD MICRO-SAVINGS */}
         {activeTab === 'vault' && (
-          <div style={styles.tabContainer}>
+          <div style={{ ...styles.tabContainer, flex: 1, display: 'flex', flexDirection: 'column' }}>
             
             {/* Vault Metrics */}
-            <div style={styles.card}>
+            <div style={{ 
+              ...styles.card, 
+              display: 'flex', 
+              flexDirection: 'column', 
+              flex: 1, 
+              minHeight: 'calc(100vh - 220px)', 
+              padding: '24px 20px', 
+              boxSizing: 'border-box' 
+            }}>
               <div style={styles.cardHeader}>
-                <PiggyBank size={20} color="#16a34a" />
-                <h2 style={styles.cardTitle}>Automated Round-Up Vault</h2>
+                <PiggyBank size={22} color="#16a34a" />
+                <h2 style={{ ...styles.cardTitle, fontSize: 16 }}>Automated Round-Up Vault</h2>
+              </div>
+              
+              <p style={{ fontSize: 12, color: '#64748b', margin: '-4px 0 20px 0', lineHeight: '1.4' }}>
+                Your spare change from transactions is saved here automatically. Once the threshold is met, it auto-sweeps into your 7.2% Flexi-RD account.
+              </p>
+
+              {/* Grid of micro-savings cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 24 }}>
+                {(() => {
+                  const threshold = vaultData?.target_threshold || 100;
+                  const balance = vaultData?.balance || 0;
+                  const percent = Math.min(100, Math.floor((balance / threshold) * 100));
+
+                  return (
+                    <div style={{ 
+                      ...styles.budgetBox, 
+                      backgroundColor: '#f0fdf4', 
+                      borderColor: '#bbf7d0',
+                      padding: '14px 12px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      minHeight: 120
+                    }}>
+                      <div>
+                        <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 700, display: 'block' }}>Spare Change</span>
+                        <span style={{ fontSize: 28, fontWeight: 900, color: '#006C49', display: 'block', margin: '4px 0' }}>
+                          ₹{balance.toLocaleString()}
+                        </span>
+                      </div>
+                      <div>
+                        <span style={{ fontSize: 10, color: '#16a34a', fontWeight: 600 }}>Sweep Progress: {percent}%</span>
+                        <div style={{ height: 6, backgroundColor: '#bbf7d0', borderRadius: 3, overflow: 'hidden', marginTop: 4 }}>
+                          <div style={{ width: `${percent}%`, height: '100%', backgroundColor: '#006C49', borderRadius: 3 }}></div>
+                        </div>
+                        <span style={{ fontSize: 9, color: '#16a34a', display: 'block', marginTop: 4 }}>Target: ₹{threshold}</span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div style={{ 
+                  ...styles.budgetBox, 
+                  backgroundColor: '#faf5ff', 
+                  borderColor: '#e9d5ff',
+                  padding: '14px 12px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  minHeight: 120
+                }}>
+                  <div>
+                    <span style={{ fontSize: 12, color: '#7c3aed', fontWeight: 700, display: 'block' }}>Flexi-RD Savings</span>
+                    <span style={{ fontSize: 28, fontWeight: 900, color: '#7c3aed', display: 'block', margin: '4px 0' }}>
+                      ₹{(vaultData?.flexi_rd_balance || 0).toLocaleString()}
+                    </span>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: 11, color: '#7c3aed', fontWeight: 700, display: 'block' }}>7.2% Per Annum</span>
+                    <span style={{ fontSize: 10, color: '#9d3fe7', display: 'block', marginTop: 2 }}>Sweeps Completed: {vaultData?.total_sweeps_count || 0}</span>
+                  </div>
+                </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div style={{ ...styles.budgetBox, backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }}>
-                  <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 600 }}>Spare Change Vault</span>
-                  <span style={{ fontSize: 24, fontWeight: 800, color: '#006C49' }}>
-                    ₹{(vaultData?.balance || 0).toLocaleString()}
-                  </span>
-                  <span style={{ fontSize: 11, color: '#16a34a', marginTop: 2 }}>Auto-Sweep Target: ₹{vaultData?.target_threshold}</span>
-                </div>
-
-                <div style={{ ...styles.budgetBox, backgroundColor: '#faf5ff', borderColor: '#e9d5ff' }}>
-                  <span style={{ fontSize: 12, color: '#7c3aed', fontWeight: 600 }}>Flexi-RD Savings (7.2%)</span>
-                  <span style={{ fontSize: 24, fontWeight: 800, color: '#7c3aed' }}>
-                    ₹{(vaultData?.flexi_rd_balance || 0).toLocaleString()}
-                  </span>
-                  <span style={{ fontSize: 11, color: '#7c3aed', marginTop: 2 }}>Sweeps Completed: {vaultData?.total_sweeps_count || 0}</span>
-                </div>
-              </div>
-
-              <div style={{ marginTop: 16 }}>
-                <span style={{ fontSize: 13, color: '#475569' }}>Set Auto-Sweep Threshold:</span>
-                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              {/* Auto-Sweep Threshold Selector */}
+              <div style={{ marginBottom: 24 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 8 }}>Set Auto-Sweep Threshold</span>
+                <div style={{ display: 'flex', gap: 8 }}>
                   {[100, 150, 200, 500].map(val => (
                     <button 
                       key={val}
-                      onClick={() => apiClient.updateVaultThreshold(val).then(refreshAppData)}
-                      style={vaultData?.target_threshold === val ? styles.activeVectorBtn : styles.vectorBtn}
+                      type="button"
+                      onClick={() => apiClient.updateVaultThreshold(currentUser?.upi_id || senderUpi, val).then(refreshAppData)}
+                      style={{
+                        ...styles.vectorBtn,
+                        flex: 1,
+                        padding: '10px 0',
+                        fontSize: 13,
+                        borderRadius: 10,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        justifyContent: 'center',
+                        ...(vaultData?.target_threshold === val 
+                          ? { backgroundColor: '#006C49', borderColor: '#006C49', color: '#ffffff' } 
+                          : { backgroundColor: '#ffffff', borderColor: '#cbd5e1', color: '#475569' }
+                        )
+                      }}
                     >
                       ₹{val}
                     </button>
@@ -954,11 +1493,24 @@ function AppContent() {
                 </div>
               </div>
 
+              {/* Action Button */}
               <button 
                 onClick={handleManualSweep}
-                style={{ ...styles.submitBtn, backgroundColor: '#006C49', marginTop: 16 }}
+                style={{ 
+                  ...styles.submitBtn, 
+                  backgroundColor: '#006C49', 
+                  marginTop: 'auto',
+                  padding: 14,
+                  fontSize: 14,
+                  fontWeight: 800,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  boxShadow: '0 4px 12px rgba(0, 108, 73, 0.15)'
+                }}
               >
-                Execute Manual Sweep to 7.2% Flexi-RD
+                <PiggyBank size={18} /> Execute Manual Sweep to 7.2% Flexi-RD
               </button>
             </div>
 
@@ -969,29 +1521,6 @@ function AppContent() {
         {activeTab === 'ledger' && (
           <div style={styles.tabContainer}>
             
-            {/* Counterparties list */}
-            <div style={styles.card}>
-              <div style={styles.cardHeader}>
-                <Wallet size={20} color="#006C49" />
-                <h2 style={styles.cardTitle}>Registered Counterparties</h2>
-              </div>
-
-              <div style={styles.entityList}>
-                {entities.map(entity => (
-                  <div key={entity.id} style={entity.id === currentUser.id ? { ...styles.entityItem, borderColor: '#006C49', backgroundColor: '#f0fdf4' } : styles.entityItem}>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={styles.entityName}>{entity.name}</span>
-                        <span style={getTypeStyle(entity.type)}>{entity.type.toUpperCase()}</span>
-                      </div>
-                      <span style={styles.upiText}>{entity.upi_id}</span>
-                    </div>
-                    <span style={styles.balanceText}>₹{entity.balance.toLocaleString()}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
             {/* Audit Log */}
             <div style={styles.card}>
               <div style={styles.cardHeader}>
@@ -999,16 +1528,20 @@ function AppContent() {
                 <h2 style={styles.cardTitle}>Transaction History</h2>
               </div>
               <div style={styles.txList}>
-                {transactions.length === 0 ? (
-                  <div style={{ color: '#64748b', fontSize: 13, fontStyle: 'italic' }}>
-                    No transactions recorded yet. Initiate a payment to populate ledger.
-                  </div>
-                ) : (
-                  transactions.map(tx => (
+                {(() => {
+                  const filteredTxs = transactions.filter(tx => tx.sender_upi === currentUser.upi_id);
+                  if (filteredTxs.length === 0) {
+                    return (
+                      <div style={{ color: '#64748b', fontSize: 13, fontStyle: 'italic' }}>
+                        No transactions recorded yet. Initiate a payment to populate ledger.
+                      </div>
+                    );
+                  }
+                  return filteredTxs.map(tx => (
                     <div key={tx.id} style={styles.txItem}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>
-                          {tx.sender_upi === currentUser.upi_id ? 'You' : tx.sender_upi.split('@')[0]} → {tx.receiver_upi.split('@')[0]}
+                          You → {tx.receiver_upi.split('@')[0]}
                         </span>
                         <span style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>
                           ₹{tx.amount.toLocaleString()}
@@ -1018,18 +1551,21 @@ function AppContent() {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <span style={getStatusBadgeStyle(tx.status)}>{tx.status}</span>
-                          <span style={getPredictedCategoryBadge(tx.predicted_category)}>{tx.predicted_category}</span>
+                          <span style={getPredictedCategoryBadge(tx.note === 'other' ? 'transfers' : (tx.note || 'essential'))}>
+                            {tx.note === 'other' ? 'transfers' : (tx.note || 'essential')}
+                          </span>
                           <span style={{ fontSize: 10, fontWeight: 700, color: getRiskColor(tx.risk_score) }}>
                             Score: {tx.risk_score}
                           </span>
                         </div>
                         <span style={{ fontSize: 11, color: '#64748b' }}>
-                          {new Date(tx.timestamp).toLocaleTimeString()}
+                          {new Date(tx.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })},{' '}
+                          {new Date(tx.timestamp).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </div>
                     </div>
-                  ))
-                )}
+                  ));
+                })()}
               </div>
             </div>
 
@@ -1077,7 +1613,7 @@ function AppContent() {
             style={{
               backgroundColor: '#ffffff',
               width: '100%',
-              maxWidth: 480,
+              maxWidth: '100%',
               borderTopLeftRadius: 20,
               borderTopRightRadius: 20,
               padding: 20,
@@ -1152,213 +1688,259 @@ function AppContent() {
 
       {/* Payment Overlay Modal */}
       {isPaymentModalOpen && (
-        <div style={styles.modalOverlay}>
-          <div style={{ ...styles.modalContent, position: 'relative', width: '90%', maxWidth: 400, padding: 24 }}>
-            
-            {/* CLOSE BUTTON */}
-            <button 
-              onClick={() => setIsPaymentModalOpen(false)}
-              style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: '#f8fafc',
+          zIndex: 1000,
+          display: 'flex',
+          flexDirection: 'column',
+          boxSizing: 'border-box'
+        }}>
+          {/* Top AppBar */}
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            padding: '16px 20px', 
+            borderBottom: '1px solid #e2e8f0', 
+            backgroundColor: '#ffffff'
+          }}>
+            <button
+              onClick={() => {
+                if (paymentResult) {
+                  setPaymentResult(null);
+                  setIsPaymentModalOpen(false);
+                } else if (isEnteringUpiPin) {
+                  setIsEnteringUpiPin(false);
+                } else if (verifiedRecipient) {
+                  setVerifiedRecipient(null);
+                  setAmount(0);
+                } else {
+                  setIsPaymentModalOpen(false);
+                }
+              }}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: 4,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#006C49'
+              }}
             >
-              <XCircle size={22} />
+              <ArrowLeft size={24} />
             </button>
+            <span style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', marginLeft: 12 }}>
+              {paymentResult 
+                ? (paymentResult.status === 'SUCCESS' ? 'Payment Success' : 'Payment Failed')
+                : (verifiedRecipient ? `Pay to ${verifiedRecipient.name}` : (paymentMode === 'PHONE' ? 'Pay to Contact' : 'Pay to UPI ID'))
+              }
+            </span>
+          </div>
+
+          {/* Page Scrollable Content */}
+          <div style={{ 
+            flex: 1, 
+            padding: '24px 20px', 
+            overflow: 'hidden', 
+            display: 'flex', 
+            flexDirection: 'column', 
+            width: '100%', 
+            maxWidth: 480, 
+            margin: '0 auto', 
+            boxSizing: 'border-box' 
+          }}>
 
             {/* PHASE 3: STATUS SCREENS */}
             {paymentResult ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20, flex: 1 }}>
                 {paymentResult.status === 'SUCCESS' ? (
                   /* PAYMENT SUCCESS VIEW */
-                  <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-                    <div style={{ 
-                      width: 72, 
-                      height: 72, 
-                      borderRadius: '50%', 
-                      backgroundColor: '#16a34a', 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'center',
-                      color: '#ffffff',
-                      boxShadow: '0 4px 15px rgba(22, 163, 74, 0.3)',
-                      marginBottom: 8
-                    }}>
-                      <Check size={38} />
-                    </div>
-                    <h2 style={{ fontSize: 20, fontWeight: 800, color: '#006C49', margin: 0 }}>Payment Successful</h2>
-                    <span style={{ fontSize: 11, color: '#64748b' }}>Transaction ID: {paymentResult.txId}</span>
-
-                    <span style={{ fontSize: 32, fontWeight: 800, color: '#0f172a', margin: '8px 0' }}>
-                      ₹{paymentResult.amount.toLocaleString()}
-                    </span>
-
-                    <span style={{ fontSize: 11, color: '#64748b' }}>
-                      📅 {new Date(paymentResult.timestamp).toLocaleString()}
-                    </span>
-
-                    {/* Recipient info */}
-                    <div style={{ 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      gap: 12, 
-                      backgroundColor: '#f8fafc', 
-                      border: '1px solid #e2e8f0', 
-                      borderRadius: 12, 
-                      padding: 12, 
-                      width: '100%', 
-                      margin: '12px 0 6px 0',
-                      textAlign: 'left'
-                    }}>
+                  <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, margin: 'auto 0', width: '100%' }}>
                       <div style={{ 
-                        width: 36, 
-                        height: 36, 
+                        width: 72, 
+                        height: 72, 
                         borderRadius: '50%', 
-                        backgroundColor: '#006C49', 
-                        color: '#ffffff', 
+                        backgroundColor: '#16a34a', 
                         display: 'flex', 
                         alignItems: 'center', 
                         justifyContent: 'center',
-                        fontWeight: 700
+                        color: '#ffffff',
+                        boxShadow: '0 4px 15px rgba(22, 163, 74, 0.3)',
+                        marginBottom: 8
                       }}>
-                        {paymentResult.payeeName[0]}
+                        <Check size={38} />
                       </div>
-                      <div>
-                        <h4 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#0f172a' }}>{paymentResult.payeeName}</h4>
-                        <span style={{ fontSize: 11, color: '#64748b' }}>{paymentResult.payeeUpi}</span>
-                      </div>
-                      <div style={{ marginLeft: 'auto', color: '#16a34a' }}>
-                        <CheckCircle2 size={16} />
-                      </div>
-                    </div>
+                      <h2 style={{ fontSize: 20, fontWeight: 800, color: '#006C49', margin: 0 }}>Payment Successful</h2>
+                      <span style={{ fontSize: 11, color: '#64748b' }}>Transaction ID: {paymentResult.txId}</span>
 
-                    {/* Source details */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#64748b' }}>
-                      <Home size={14} />
-                      <span>Paid from Small Finance Bank •••• 8829</span>
-                    </div>
+                      <span style={{ fontSize: 32, fontWeight: 800, color: '#0f172a', margin: '8px 0' }}>
+                        ₹{paymentResult.amount.toLocaleString()}
+                      </span>
 
-                    {/* Reward Card */}
-                    <div style={{ 
-                      width: '100%', 
-                      background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)', 
-                      border: '1px solid #bbf7d0',
-                      borderRadius: 12, 
-                      padding: 12, 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      gap: 10,
-                      marginTop: 10,
-                      textAlign: 'left'
-                    }}>
-                      <div style={{ backgroundColor: '#16a34a', color: '#ffffff', borderRadius: 8, padding: 6 }}>
-                        <Award size={18} />
+                      <span style={{ fontSize: 11, color: '#64748b' }}>
+                        📅 {new Date(paymentResult.timestamp).toLocaleString()}
+                      </span>
+
+                      {/* Recipient info */}
+                      <div style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: 12, 
+                        backgroundColor: '#f8fafc', 
+                        border: '1px solid #e2e8f0', 
+                        borderRadius: 12, 
+                        padding: 12, 
+                        width: '100%', 
+                        margin: '12px 0 6px 0',
+                        textAlign: 'left'
+                      }}>
+                        <div style={{ 
+                          width: 36, 
+                          height: 36, 
+                          borderRadius: '50%', 
+                          backgroundColor: '#006C49', 
+                          color: '#ffffff', 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          justifyContent: 'center',
+                          fontWeight: 700
+                        }}>
+                          {paymentResult.payeeName[0]}
+                        </div>
+                        <div>
+                          <h4 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#0f172a' }}>{paymentResult.payeeName}</h4>
+                          <span style={{ fontSize: 11, color: '#64748b' }}>{paymentResult.payeeUpi}</span>
+                        </div>
+                        <div style={{ marginLeft: 'auto', color: '#16a34a' }}>
+                          <CheckCircle2 size={16} />
+                        </div>
                       </div>
-                      <div>
-                        <h5 style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#006C49' }}>New Reward Earned!</h5>
-                        <span style={{ fontSize: 10, color: '#16a34a' }}>Tap to scratch and reveal coupon</span>
+
+                      {/* Source details */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#64748b' }}>
+                        <Home size={14} />
+                        <span>Paid from Small Finance Bank •••• 8829</span>
+                      </div>
+
+                      {/* Reward Card */}
+                      <div style={{ 
+                        width: '100%', 
+                        background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)', 
+                        border: '1px solid #bbf7d0',
+                        borderRadius: 12, 
+                        padding: 12, 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: 10,
+                        marginTop: 10,
+                        textAlign: 'left'
+                      }}>
+                        <div style={{ backgroundColor: '#16a34a', color: '#ffffff', borderRadius: 8, padding: 6 }}>
+                          <Award size={18} />
+                        </div>
+                        <div>
+                          <h5 style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#006C49' }}>New Reward Earned!</h5>
+                          <span style={{ fontSize: 10, color: '#16a34a' }}>Tap to scratch and reveal coupon</span>
+                        </div>
                       </div>
                     </div>
 
                     <button 
                       onClick={() => setIsPaymentModalOpen(false)}
-                      style={{ ...styles.submitBtn, backgroundColor: '#006C49', width: '100%', marginTop: 12 }}
+                      style={{ ...styles.submitBtn, backgroundColor: '#006C49', width: '100%', marginTop: 'auto' }}
                     >
                       Back to Home
                     </button>
                   </div>
                 ) : (
                   /* PAYMENT FAILED VIEW */
-                  <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-                    <div style={{ 
-                      width: 72, 
-                      height: 72, 
-                      borderRadius: '50%', 
-                      backgroundColor: '#ef4444', 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'center',
-                      color: '#ffffff',
-                      boxShadow: '0 4px 15px rgba(239, 68, 68, 0.3)',
-                      marginBottom: 8
-                    }}>
-                      <XCircle size={38} />
+                  <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, margin: 'auto 0', width: '100%' }}>
+                      <div style={{ 
+                        width: 72, 
+                        height: 72, 
+                        borderRadius: '50%', 
+                        backgroundColor: '#ef4444', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        color: '#ffffff',
+                        boxShadow: '0 4px 15px rgba(239, 68, 68, 0.3)',
+                        marginBottom: 8
+                      }}>
+                        <XCircle size={38} />
+                      </div>
+                      <h2 style={{ fontSize: 20, fontWeight: 800, color: '#991b1b', margin: 0 }}>Payment Failed</h2>
+                      <span style={{ fontSize: 11, color: '#64748b' }}>Transaction ID: {paymentResult.txId}</span>
+
+                      <span style={{ fontSize: 32, fontWeight: 800, color: '#0f172a', margin: '8px 0' }}>
+                        ₹{paymentResult.amount.toLocaleString()}
+                      </span>
+
+                      <div style={{ 
+                        backgroundColor: '#fff1f2', 
+                        border: '1px solid #fecaca', 
+                        color: '#991b1b', 
+                        padding: 12, 
+                        borderRadius: 12, 
+                        width: '100%', 
+                        fontSize: 12,
+                        fontWeight: 600,
+                        margin: '8px 0'
+                      }}>
+                        {paymentResult.errorMessage || 'Unknown Error Encountered'}
+                      </div>
                     </div>
-                    <h2 style={{ fontSize: 20, fontWeight: 800, color: '#991b1b', margin: 0 }}>Payment Failed</h2>
-                    <span style={{ fontSize: 11, color: '#64748b' }}>Transaction ID: {paymentResult.txId}</span>
 
-                    <span style={{ fontSize: 32, fontWeight: 800, color: '#0f172a', margin: '8px 0' }}>
-                      ₹{paymentResult.amount.toLocaleString()}
-                    </span>
-
-                    <div style={{ 
-                      backgroundColor: '#fff1f2', 
-                      border: '1px solid #fecaca', 
-                      color: '#991b1b', 
-                      padding: 12, 
-                      borderRadius: 12, 
-                      width: '100%', 
-                      fontSize: 12,
-                      fontWeight: 600,
-                      margin: '8px 0'
-                    }}>
-                      {paymentResult.errorMessage || 'Unknown Error Encountered'}
+                    <div style={{ marginTop: 'auto', width: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <button 
+                        onClick={() => setPaymentResult(null)}
+                        style={{ ...styles.submitBtn, backgroundColor: '#dc2626', width: '100%', margin: 0 }}
+                      >
+                        Try Again
+                      </button>
+                      <button 
+                        onClick={() => setIsPaymentModalOpen(false)}
+                        style={{ ...styles.submitBtn, backgroundColor: '#64748b', width: '100%', margin: 0 }}
+                      >
+                        Back to Home
+                      </button>
                     </div>
-
-                    <button 
-                      onClick={() => setPaymentResult(null)}
-                      style={{ ...styles.submitBtn, backgroundColor: '#dc2626', width: '100%' }}
-                    >
-                      Try Again
-                    </button>
-                    <button 
-                      onClick={() => setIsPaymentModalOpen(false)}
-                      style={{ ...styles.submitBtn, backgroundColor: '#64748b', width: '100%', marginTop: -4 }}
-                    >
-                      Back to Home
-                    </button>
                   </div>
                 )}
               </div>
             ) : !verifiedRecipient ? (
               /* PHASE 1: VERIFICATION SCREEN */
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                  <ArrowRightLeft size={20} color="#006C49" />
-                  <h2 style={{ ...styles.cardTitle, fontSize: 18, color: '#006C49' }}>Pay to Contact</h2>
-                </div>
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+                <p style={{ ...styles.description, marginBottom: 16 }}>
+                  Enter details to verify the beneficiary and proceed with payment.
+                </p>
 
-                <div style={{ ...styles.form, marginTop: 12 }}>
+                <div style={{ ...styles.form, marginTop: 12, flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                   <div style={styles.formGroup}>
-                    <label style={styles.label}>Recipient's UPI ID / Phone Number</label>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <input 
-                        type="text" 
-                        value={verificationQuery}
-                        onChange={e => setVerificationQuery(e.target.value)}
-                        placeholder="e.g. sunitadevi@upi or +91 94140 54321"
-                        style={{ ...styles.input, flex: 1 }}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleVerifyRecipient();
-                          }
-                        }}
-                      />
-                      <button 
-                        type="button" 
-                        onClick={handleVerifyRecipient}
-                        style={{
-                          backgroundColor: '#16a34a',
-                          color: '#ffffff',
-                          border: 'none',
-                          borderRadius: 8,
-                          padding: '0 16px',
-                          fontWeight: 700,
-                          fontSize: 13,
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Verify
-                      </button>
-                    </div>
+                    <label style={styles.label}>
+                      {paymentMode === 'PHONE' ? "Recipient's Phone Number" : "Recipient's UPI ID"}
+                    </label>
+                    <input 
+                      type="text" 
+                      value={verificationQuery}
+                      onChange={e => setVerificationQuery(e.target.value)}
+                      placeholder={paymentMode === 'PHONE' ? 'e.g. +91 94140 54321' : 'e.g. sunitadevi@upi'}
+                      style={styles.input}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleVerifyRecipient();
+                        }
+                      }}
+                    />
                   </div>
 
                   {verificationError && (
@@ -1376,180 +1958,588 @@ function AppContent() {
                     </div>
                   )}
 
-                  <div style={{ marginTop: 12, padding: 12, backgroundColor: '#f0fdf4', borderRadius: 8, border: '1px dashed #bbf7d0' }}>
-                    <span style={{ fontSize: 11, color: '#006C49', fontWeight: 700, display: 'block', marginBottom: 4 }}>💡 Quick Directory Search Hint:</span>
-                    <span style={{ fontSize: 11, color: '#475569', lineHeight: '1.4' }}>
-                      Try paying <strong>Sunita Devi</strong> via her phone number <code>94140 54321</code> or UPI <code>sunitadevi@upi</code>.
+                  {/* DISPLAY AVAILABLE CREDENTIALS INSTEAD OF TIP */}
+                  <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', marginTop: 16 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#006C49', display: 'block', marginBottom: 8 }}>
+                      {paymentMode === 'PHONE' ? 'Available Registered Phone Numbers:' : 'Available Registered UPI IDs:'}
                     </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, overflowY: 'auto', paddingRight: 4, marginBottom: 16 }}>
+                      {entities
+                        .filter(e => e.upi_id !== senderUpi && (paymentMode === 'PHONE' ? !!e.phone : true))
+                        .map(ent => (
+                          <div 
+                            key={ent.id}
+                            onClick={() => setVerificationQuery(paymentMode === 'PHONE' ? (ent.phone || '') : ent.upi_id)}
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              padding: '8px 12px',
+                              backgroundColor: '#f8fafc',
+                              border: '1px solid #e2e8f0',
+                              borderRadius: 8,
+                              cursor: 'pointer',
+                              fontSize: 12,
+                              transition: 'all 0.2s'
+                            }}
+                            onMouseEnter={e => {
+                              e.currentTarget.style.borderColor = '#006C49';
+                              e.currentTarget.style.backgroundColor = '#f0fdf4';
+                            }}
+                            onMouseLeave={e => {
+                              e.currentTarget.style.borderColor = '#e2e8f0';
+                              e.currentTarget.style.backgroundColor = '#f8fafc';
+                            }}
+                          >
+                            <span style={{ fontWeight: 600, color: '#0f172a' }}>{ent.name}</span>
+                            <span style={{ color: '#006C49', fontFamily: 'monospace', fontWeight: 600 }}>
+                              {paymentMode === 'PHONE' ? ent.phone : ent.upi_id}
+                            </span>
+                          </div>
+                        ))}
+                    </div>
                   </div>
+
+                  <button 
+                    type="button" 
+                    onClick={handleVerifyRecipient}
+                    style={{
+                      ...styles.submitBtn,
+                      backgroundColor: '#006C49',
+                      width: '100%',
+                      padding: 14,
+                      fontSize: 15,
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 6
+                    }}
+                  >
+                    Verify Beneficiary ➔
+                  </button>
                 </div>
               </div>
-            ) : (
-              /* PHASE 2: STANDARD COMMON PAYMENT PAGE */
-              <div>
-                {/* Back button and title */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-                  <button 
-                    onClick={() => {
-                      setVerifiedRecipient(null);
-                      setAmount(0);
-                    }} 
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}
-                  >
-                    <ArrowLeft size={20} color="#006C49" />
-                  </button>
-                  <h2 style={{ ...styles.cardTitle, fontSize: 18, color: '#006C49' }}>Pay to UPI ID</h2>
-                </div>
-
-                {/* Payee verified badge card */}
+            ) : isEnteringUpiPin ? (
+              /* PHASE 1.5: DEDICATED UPI PIN PAGE (NPCI STANDARD LAYOUT) */
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, backgroundColor: '#f3f4f6', overflow: 'hidden' }}>
+                
+                {/* Top Bar */}
                 <div style={{ 
                   display: 'flex', 
+                  justifyContent: 'space-between', 
                   alignItems: 'center', 
-                  gap: 12, 
-                  backgroundColor: '#f0fdf4', 
-                  border: '1px solid #bbf7d0', 
-                  borderRadius: 12, 
-                  padding: 12, 
-                  marginBottom: 16 
+                  padding: '16px 20px 8px 20px', 
+                  backgroundColor: 'transparent' 
                 }}>
+                  {/* UPI Logo in italic styled text */}
+                  <span style={{ fontSize: 18, fontWeight: 900, fontStyle: 'italic', letterSpacing: '-0.5px' }}>
+                    <span style={{ color: '#4b5563' }}>U</span>
+                    <span style={{ color: '#059669' }}>P</span>
+                    <span style={{ color: '#3b82f6' }}>I</span>
+                  </span>
+                  {/* Close X button */}
+                  <button 
+                    onClick={() => setIsEnteringUpiPin(false)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#4b5563', padding: 4 }}
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+
+                {/* Source Bank details */}
+                <div style={{ padding: '0 20px', marginBottom: 12 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    SAVINGS · Small Finance Bank ···· 8829
+                  </span>
+                </div>
+
+                {/* Payment summary card */}
+                <div style={{ 
+                  margin: '0 20px 24px 20px', 
+                  padding: '16px 20px', 
+                  backgroundColor: '#fffdf4', 
+                  border: '1px solid #fef08a', 
+                  borderRadius: 16, 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+                }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>To: {verifiedRecipient ? verifiedRecipient.name : ''}</span>
+                    <span style={{ fontSize: 24, fontWeight: 900, color: '#1f2937' }}>Pay ₹{amount.toFixed(2)}</span>
+                  </div>
+                  {/* Recipient User Badge */}
                   <div style={{ 
-                    width: 38, 
-                    height: 38, 
-                    borderRadius: '50%', 
-                    backgroundColor: '#006C49', 
+                    width: 36, 
+                    height: 36, 
+                    borderRadius: 10, 
+                    backgroundColor: '#2563eb', 
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'center', 
                     color: '#ffffff' 
                   }}>
-                    <Check size={20} />
+                    <User size={18} />
                   </div>
-                  <div style={{ flex: 1 }}>
-                    <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#0f172a' }}>
-                      {verifiedRecipient.name}
-                    </h4>
-                    <span style={{ fontSize: 10, color: '#16a34a', fontWeight: 700 }}>
-                      Verified Name: {verifiedRecipient.name.toUpperCase()}
-                    </span>
-                  </div>
-                  <Info size={18} color="#64748b" />
                 </div>
 
-                {/* Payment form */}
-                <form onSubmit={handleSendPayment} style={styles.form}>
+                {/* Centered PIN entry display */}
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '12px 24px' }}>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: '#1f2937', marginBottom: 16 }}>Enter your PIN</span>
                   
-                  {/* Currency Amount Display */}
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '12px 0 16px 0', gap: 6 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: 32, fontWeight: 800, color: '#16a34a' }}>₹</span>
-                      <input 
-                        type="number" 
-                        value={amount === 0 ? '' : amount} 
-                        onChange={e => setAmount(Number(e.target.value))}
-                        style={{
-                          border: 'none',
-                          borderBottom: '2px solid #cbd5e1',
-                          fontSize: 36,
-                          fontWeight: 800,
-                          color: '#0f172a',
-                          width: '160px',
-                          textAlign: 'center',
-                          outline: 'none',
-                          backgroundColor: 'transparent'
-                        }}
-                        min={1}
-                        required
-                        placeholder="0"
-                      />
-                    </div>
-                    <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Enter amount you want to transfer</span>
+                  {/* 6 Digit hollow circles */}
+                  <div style={{ display: 'flex', gap: 16, marginBottom: 28 }}>
+                    {[0, 1, 2, 3, 4, 5].map(idx => {
+                      const hasDigit = idx < upiPin.length;
+                      return (
+                        <div key={idx} style={{ 
+                          width: 14, 
+                          height: 14, 
+                          borderRadius: '50%', 
+                          border: hasDigit ? '2px solid #1f2937' : '2px solid #9ca3af',
+                          backgroundColor: hasDigit ? '#1f2937' : 'transparent',
+                          transition: 'all 0.1s ease-in-out'
+                        }} />
+                      );
+                    })}
                   </div>
+                </div>
 
-                  {/* Add note section */}
-                  <div style={{ ...styles.formGroup, marginBottom: 12 }}>
-                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                      <FileText size={18} color="#64748b" style={{ position: 'absolute', left: 12 }} />
-                      <input 
-                        type="text" 
-                        value={note} 
-                        onChange={e => setNote(e.target.value)}
-                        placeholder="Add a note (e.g. Dinner, Rent)"
-                        style={{ ...styles.input, paddingLeft: 38, width: '100%' }}
-                      />
-                    </div>
+                {/* Warning note above keyboard */}
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  gap: 6, 
+                  marginBottom: 20, 
+                  fontSize: 11, 
+                  fontWeight: 600, 
+                  color: '#6b7280' 
+                }}>
+                  <span style={{ 
+                    display: 'inline-flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    width: 14, 
+                    height: 14, 
+                    borderRadius: '50%', 
+                    border: '1.5px solid #d97706', 
+                    color: '#d97706',
+                    fontSize: 9,
+                    fontWeight: 800
+                  }}>i</span>
+                  <span>Never enter your UPI PIN to receive money</span>
+                </div>
+
+                {/* Custom Numeric Keypad at the bottom */}
+                <div style={{ backgroundColor: '#eef2f6', padding: '20px 24px 28px 24px', width: '100%', boxSizing: 'border-box' }}>
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(3, 1fr)', 
+                    gap: 16,
+                    maxWidth: 340,
+                    margin: '0 auto'
+                  }}>
+                    {/* Row 1 */}
+                    <button type="button" onClick={() => handleKeypadPress('1')} style={styles.keypadNum}>1</button>
+                    <button type="button" onClick={() => handleKeypadPress('2')} style={styles.keypadNum}>2</button>
+                    <button type="button" onClick={() => handleKeypadPress('3')} style={styles.keypadNum}>3</button>
+
+                    {/* Row 2 */}
+                    <button type="button" onClick={() => handleKeypadPress('4')} style={styles.keypadNum}>4</button>
+                    <button type="button" onClick={() => handleKeypadPress('5')} style={styles.keypadNum}>5</button>
+                    <button type="button" onClick={() => handleKeypadPress('6')} style={styles.keypadNum}>6</button>
+
+                    {/* Row 3 */}
+                    <button type="button" onClick={() => handleKeypadPress('7')} style={styles.keypadNum}>7</button>
+                    <button type="button" onClick={() => handleKeypadPress('8')} style={styles.keypadNum}>8</button>
+                    <button type="button" onClick={() => handleKeypadPress('9')} style={styles.keypadNum}>9</button>
+
+                    {/* Row 4 */}
+                    <button 
+                      type="button" 
+                      onClick={() => handleKeypadPress('backspace')} 
+                      style={{ 
+                        background: 'none', 
+                        border: 'none', 
+                        cursor: 'pointer', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        color: '#1f2937'
+                      }}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"></path>
+                        <line x1="18" y1="9" x2="12" y2="15"></line>
+                        <line x1="12" y1="9" x2="18" y2="15"></line>
+                      </svg>
+                    </button>
+                    <button type="button" onClick={() => handleKeypadPress('0')} style={styles.keypadNum}>0</button>
+                    <button 
+                      type="button" 
+                      onClick={() => handleKeypadPress('confirm')}
+                      style={{ 
+                        backgroundColor: upiPin.length === 6 ? '#2563eb' : '#60a5fa', 
+                        color: '#ffffff',
+                        borderRadius: 24,
+                        border: 'none',
+                        fontSize: 16,
+                        fontWeight: 800,
+                        height: 48,
+                        cursor: upiPin.length === 6 ? 'pointer' : 'not-allowed',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: upiPin.length === 6 ? '0 4px 10px rgba(37, 99, 235, 0.2)' : 'none',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      Pay
+                    </button>
                   </div>
+                </div>
+              </div>
+            ) : (
+              /* PHASE 2: STANDARD COMMON PAYMENT PAGE */
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                {/* Enter payment details */}
 
-                  {/* Linked Bank details */}
-                  <div style={{ marginBottom: 12 }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>Linked Bank Account</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, backgroundColor: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 12, padding: 12 }}>
+                {/* Payment form */}
+                <form onSubmit={handleSendPayment} style={{ ...styles.form, display: 'flex', flexDirection: 'column', flex: 1 }}>
+                  
+                  {/* Centering Wrapper for Inputs */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12, margin: 'auto 0' }}>
+                    
+                    {/* Payee verified badge card */}
+                    <div style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: 12, 
+                      backgroundColor: '#f0fdf4', 
+                      border: '1px solid #bbf7d0', 
+                      borderRadius: 12, 
+                      padding: 12,
+                      marginBottom: 4
+                    }}>
                       <div style={{ 
-                        width: 36, 
-                        height: 36, 
-                        borderRadius: 8, 
-                        backgroundColor: '#E6F4EA', 
+                        width: 38, 
+                        height: 38, 
+                        borderRadius: '50%', 
+                        backgroundColor: '#006C49', 
                         display: 'flex', 
                         alignItems: 'center', 
                         justifyContent: 'center', 
-                        color: '#006C49' 
+                        color: '#ffffff' 
                       }}>
-                        <Home size={18} />
+                        <Check size={20} />
                       </div>
                       <div style={{ flex: 1 }}>
-                        <h5 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#0f172a' }}>Small Finance Bank •••• 8829</h5>
-                        <span style={{ fontSize: 11, color: '#64748b' }}>
-                          Available Balance: ₹{currentUser.balance.toLocaleString()}
+                        <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#0f172a' }}>
+                          {verifiedRecipient.name}
+                        </h4>
+                        <span style={{ fontSize: 10, color: '#16a34a', fontWeight: 700 }}>
+                          Verified Name: {verifiedRecipient.name.toUpperCase()}
                         </span>
                       </div>
+                      <Info size={18} color="#64748b" />
                     </div>
-                  </div>
 
-                  {/* Real-Time ML Prediction Feedback Card */}
-                  {liveEvaluation && (
-                    <div style={{ ...styles.previewBox, borderColor: themeColors.borderColor, padding: 12 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <Sparkles size={16} color={themeColors.primary} />
-                          <span style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>
-                            Sahayak Assistant Guard:
+                    {/* Currency Amount Display */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '8px 0 12px 0', gap: 6 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 32, fontWeight: 800, color: '#16a34a' }}>₹</span>
+                        <input 
+                          type="number" 
+                          value={amount === 0 ? '' : amount} 
+                          onChange={e => setAmount(Number(e.target.value))}
+                          style={{
+                            border: 'none',
+                            borderBottom: '2px solid #cbd5e1',
+                            fontSize: 36,
+                            fontWeight: 800,
+                            color: '#0f172a',
+                            width: '160px',
+                            textAlign: 'center',
+                            outline: 'none',
+                            backgroundColor: 'transparent'
+                          }}
+                          min={1}
+                          required
+                          placeholder="0"
+                        />
+                      </div>
+                      <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Enter amount you want to transfer</span>
+                    </div>
+
+                    {/* Select note category selection */}
+                    <div style={{ ...styles.formGroup, marginBottom: 8 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>Transaction Category (Note)</span>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        {(['essential', 'impulsive', 'other', 'emi'] as const).map(option => {
+                          const hasNoLiabilities = option === 'emi' && (!currentUser?.liabilities || currentUser.liabilities.length === 0);
+                          return (
+                            <button
+                              key={option}
+                              type="button"
+                              disabled={hasNoLiabilities}
+                              onClick={() => {
+                                if (option === 'emi') {
+                                  setShowEmiPopup(true);
+                                  setSelectedLiabilityId('');
+                                } else {
+                                  setNote(option);
+                                  setCurrentEmiLiability(null);
+                                }
+                              }}
+                              style={{
+                                flex: 1,
+                                padding: '10px 4px',
+                                borderRadius: 10,
+                                border: note === option 
+                                  ? '2px solid #006C49' 
+                                  : '1px solid #cbd5e1',
+                                backgroundColor: hasNoLiabilities 
+                                  ? '#f1f5f9' 
+                                  : (note === option ? '#E6F4EA' : '#ffffff'),
+                                color: hasNoLiabilities 
+                                  ? '#94a3b8' 
+                                  : (note === option ? '#006C49' : '#475569'),
+                                fontWeight: 700,
+                                fontSize: 11,
+                                textTransform: 'capitalize',
+                                cursor: hasNoLiabilities ? 'not-allowed' : 'pointer',
+                                transition: 'all 0.2s ease',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 2,
+                                opacity: hasNoLiabilities ? 0.6 : 1
+                              }}
+                            >
+                              {option === 'essential' && '🥦 '}
+                              {option === 'impulsive' && '🛍️ '}
+                              {option === 'other' && '🏷️ '}
+                              {option === 'emi' && '📉 '}
+                              {option}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Linked Bank details */}
+                    <div style={{ marginBottom: 8 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 6 }}>Linked Bank Account</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, backgroundColor: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 12, padding: 12 }}>
+                        <div style={{ 
+                          width: 36, 
+                          height: 36, 
+                          borderRadius: 8, 
+                          backgroundColor: '#E6F4EA', 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          justifyContent: 'center', 
+                          color: '#006C49' 
+                        }}>
+                          <Home size={18} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <h5 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#0f172a' }}>Small Finance Bank •••• 8829</h5>
+                          <span style={{ fontSize: 11, color: '#64748b' }}>
+                            Available Balance: ₹{currentUser.balance.toLocaleString()}
                           </span>
                         </div>
-                        <span style={getPredictedCategoryBadge(liveEvaluation.predictedCategory)}>
-                          {liveEvaluation.predictedCategory.toUpperCase()}
-                        </span>
                       </div>
-
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, margin: '6px 0 2px 0' }}>
-                        <span style={{ color: '#475569' }}>Impulse Risk Score:</span>
-                        <span style={{ fontWeight: 700, color: themeColors.textColor }}>
-                          {liveEvaluation.riskScore} / 100
-                        </span>
-                      </div>
-                      
-                      <div style={styles.progressBarBg}>
-                        <div style={{
-                          ...styles.progressBarFill,
-                          width: `${liveEvaluation.riskScore}%`,
-                          backgroundColor: themeColors.primary
-                        }} />
-                      </div>
-
-                      {liveEvaluation.roundUpAmount > 0 && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 11, color: '#16a34a' }}>
-                          <Coins size={14} />
-                          Auto Spare Change Round-Up: <strong>+₹{liveEvaluation.roundUpAmount}</strong> → Vault
-                        </div>
-                      )}
                     </div>
-                  )}
+
+                    {/* Real-Time ML Prediction Feedback Card */}
+                    {liveEvaluation && (
+                      <div style={{ ...styles.previewBox, borderColor: themeColors.borderColor, padding: 12, marginBottom: 8 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <Sparkles size={16} color={themeColors.primary} />
+                            <span style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>
+                              Sahayak Assistant Guard:
+                            </span>
+                          </div>
+                          <span style={getPredictedCategoryBadge(liveEvaluation.predictedCategory)}>
+                            {liveEvaluation.predictedCategory.toUpperCase()}
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, margin: '6px 0 2px 0' }}>
+                          <span style={{ color: '#475569' }}>Impulse Risk Score:</span>
+                          <span style={{ fontWeight: 700, color: themeColors.textColor }}>
+                            {liveEvaluation.riskScore} / 100
+                          </span>
+                        </div>
+                        
+                        <div style={styles.progressBarBg}>
+                          <div style={{
+                            ...styles.progressBarFill,
+                            width: `${liveEvaluation.riskScore}%`,
+                            backgroundColor: themeColors.primary
+                          }} />
+                        </div>
+
+                        {liveEvaluation.roundUpAmount > 0 && (
+                          <label style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: 8, 
+                            marginTop: 8, 
+                            fontSize: 11, 
+                            color: '#16a34a', 
+                            cursor: 'pointer',
+                            userSelect: 'none',
+                            fontWeight: 600
+                          }}>
+                            <input 
+                              type="checkbox" 
+                              checked={optInRoundUp} 
+                              onChange={e => setOptInRoundUp(e.target.checked)}
+                              style={{ cursor: 'pointer', accentColor: '#16a34a' }}
+                            />
+                            <span>Auto Spare Change Round-Up: <strong>+₹{liveEvaluation.roundUpAmount}</strong> → Vault</span>
+                          </label>
+                        )}
+                      </div>
+                    )}
+                  </div>
 
                   <button 
                     type="submit" 
-                    style={{ ...styles.submitBtn, backgroundColor: '#16a34a', width: '100%', fontSize: 15, padding: 14 }}
+                    style={{ 
+                      ...styles.submitBtn, 
+                      backgroundColor: '#16a34a', 
+                      width: '100%', 
+                      fontSize: 15, 
+                      padding: 14, 
+                      marginTop: 'auto',
+                      fontWeight: 700
+                    }}
                   >
                     Proceed to Pay ➔
                   </button>
                 </form>
+
+                {/* EMI Liabilities Selector Popup Modal */}
+                {showEmiPopup && (
+                  <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                    backdropFilter: 'blur(4px)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1100,
+                    padding: 16
+                  }}>
+                    <div style={{
+                      backgroundColor: '#ffffff',
+                      borderRadius: 16,
+                      padding: 20,
+                      maxWidth: 360,
+                      width: '100%',
+                      boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 16
+                    }}>
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#0f172a' }}>Select Periodic Liability</h3>
+                        <p style={{ margin: '4px 0 0 0', fontSize: 12, color: '#64748b' }}>Select one active liability to pay this EMI</p>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 240, overflowY: 'auto', paddingRight: 4 }}>
+                        {currentUser?.liabilities?.map(liab => {
+                          const isSelected = selectedLiabilityId === liab.id;
+                          return (
+                            <div 
+                              key={liab.id}
+                              onClick={() => setSelectedLiabilityId(liab.id)}
+                              style={{
+                                padding: 12,
+                                borderRadius: 10,
+                                border: isSelected ? '2px solid #006C49' : '1px solid #cbd5e1',
+                                backgroundColor: isSelected ? '#E6F4EA' : '#ffffff',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                transition: 'all 0.1s'
+                              }}
+                            >
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, textAlign: 'left' }}>
+                                <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>{liab.title}</span>
+                                <span style={{ fontSize: 10, color: '#64748b' }}>Period: {liab.period_days} days · Last paid: {liab.last_paid_date}</span>
+                              </div>
+                              <span style={{ fontSize: 14, fontWeight: 800, color: '#006C49' }}>₹{liab.amount.toLocaleString()}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div style={{ display: 'flex', gap: 10 }}>
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            setShowEmiPopup(false);
+                            setNote('other');
+                            setCurrentEmiLiability(null);
+                          }}
+                          style={{
+                            flex: 1,
+                            padding: '10px 0',
+                            borderRadius: 8,
+                            border: '1px solid #cbd5e1',
+                            backgroundColor: '#ffffff',
+                            color: '#475569',
+                            fontWeight: 700,
+                            fontSize: 12,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          Cancel
+                        </button>
+                        <button 
+                          type="button"
+                          disabled={!selectedLiabilityId}
+                          onClick={() => {
+                            const matched = currentUser?.liabilities?.find(l => l.id === selectedLiabilityId);
+                            if (matched) {
+                              setNote('emi');
+                              setCurrentEmiLiability(matched);
+                              setAmount(matched.amount);
+                            }
+                            setShowEmiPopup(false);
+                          }}
+                          style={{
+                            flex: 1,
+                            padding: '10px 0',
+                            borderRadius: 8,
+                            border: 'none',
+                            backgroundColor: '#006C49',
+                            color: '#ffffff',
+                            fontWeight: 700,
+                            fontSize: 12,
+                            cursor: selectedLiabilityId ? 'pointer' : 'not-allowed',
+                            opacity: selectedLiabilityId ? 1 : 0.6
+                          }}
+                        >
+                          Confirm
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1679,12 +2669,10 @@ export default function App() {
 }
 
 // Helper Badge Styles
-function getTypeStyle(type: string): React.CSSProperties {
+function getTypeStyle(type: number): React.CSSProperties {
   switch (type) {
-    case 'user': return { backgroundColor: '#eff6ff', color: '#2563eb', padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700 };
-    case 'family': return { backgroundColor: '#f0fdf4', color: '#16a34a', padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700 };
-    case 'merchant': return { backgroundColor: '#faf5ff', color: '#7c3aed', padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700 };
-    case 'gig_platform': return { backgroundColor: '#f0fdfa', color: '#0d9488', padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700 };
+    case 0: return { backgroundColor: '#eff6ff', color: '#2563eb', padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700 };
+    case 1: return { backgroundColor: '#faf5ff', color: '#7c3aed', padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700 };
     default: return { backgroundColor: '#f1f5f9', color: '#475569', padding: '2px 6px', borderRadius: 4, fontSize: 10 };
   }
 }
@@ -1714,14 +2702,14 @@ function getRiskColor(score: number): string {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  appShell: { maxWidth: 480, margin: '0 auto', minHeight: '100vh', display: 'flex', flexDirection: 'column', boxSizing: 'border-box', fontFamily: 'Inter, sans-serif', color: '#0f172a', paddingBottom: 70 },
+  appShell: { width: '100%', minHeight: '100vh', display: 'flex', flexDirection: 'column', boxSizing: 'border-box', fontFamily: 'Inter, sans-serif', color: '#0f172a', paddingBottom: 80 },
   centerContainer: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '80vh' },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 16px 12px 16px', backgroundColor: 'rgba(240, 253, 244, 0.85)', backdropFilter: 'blur(8px)' },
   title: { fontSize: 22, fontWeight: 800, margin: 0, color: '#006C49' },
   themeStateChip: { fontSize: 10, fontWeight: 800, padding: '3px 8px', borderRadius: 12 },
   description: { fontSize: 12, color: '#475569', margin: '2px 0 0 0' },
   statusChip: { display: 'flex', alignItems: 'center', gap: 6, backgroundColor: '#ffffff', padding: '4px 10px', borderRadius: 16, fontSize: 11, color: '#475569', border: '1px solid #e2e8f0' },
-  mainContent: { flex: 1, padding: 16 },
+  mainContent: { flex: 1, padding: '16px 16px 80px 16px' },
   tabContainer: { display: 'flex', flexDirection: 'column', gap: 16 },
   card: { backgroundColor: '#ffffff', borderRadius: 16, padding: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.03)' },
   cardHeader: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 },
@@ -1746,7 +2734,7 @@ const styles: Record<string, React.CSSProperties> = {
   entityName: { fontWeight: 600, fontSize: 13, color: '#0f172a' },
   upiText: { fontSize: 11, color: '#64748b', display: 'block', marginTop: 2 },
   balanceText: { fontWeight: 700, fontSize: 13, color: '#006C49' },
-  txList: { display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 260, overflowY: 'auto' },
+  txList: { display: 'flex', flexDirection: 'column', gap: 8 },
   txItem: { backgroundColor: '#ffffff', padding: 10, borderRadius: 8, border: '1px solid #e2e8f0' },
   seedBtn: { backgroundColor: '#ffffff', border: '1px solid #cbd5e1', color: '#006C49', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 },
   modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.4)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 },
@@ -1759,6 +2747,21 @@ const styles: Record<string, React.CSSProperties> = {
   modalActions: { display: 'flex', gap: 10 },
   cancelBtn: { flex: 1, backgroundColor: '#10b981', color: '#ffffff', border: 'none', padding: '10px', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 },
   confirmBtn: { flex: 1, backgroundColor: '#ef4444', color: '#ffffff', border: 'none', padding: '10px', borderRadius: 8, fontWeight: 700, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 },
-  bottomNav: { position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', maxWidth: 480, width: '100%', height: 60, backgroundColor: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(10px)', display: 'flex', justifyContent: 'space-around', alignItems: 'center', zIndex: 90, borderTop: '1px solid #e2e8f0', boxShadow: '0 -4px 12px rgba(0, 0, 0, 0.03)' },
-  navTab: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, background: 'none', border: 'none', color: '#64748b', fontSize: 11, cursor: 'pointer' }
+  bottomNav: { position: 'fixed', bottom: 0, left: 0, right: 0, height: 60, backgroundColor: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(10px)', display: 'flex', justifyContent: 'space-around', alignItems: 'center', zIndex: 90, borderTop: '1px solid #e2e8f0', boxShadow: '0 -4px 12px rgba(0, 0, 0, 0.03)' },
+  navTab: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, background: 'none', border: 'none', color: '#64748b', fontSize: 11, cursor: 'pointer' },
+  keypadNum: {
+    backgroundColor: '#ffffff',
+    color: '#1f2937',
+    borderRadius: 24,
+    border: 'none',
+    fontSize: 22,
+    fontWeight: '700',
+    height: 48,
+    cursor: 'pointer',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'background-color 0.1s'
+  }
 };

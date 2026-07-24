@@ -36,7 +36,16 @@ export class TransactionRepository implements ITransactionRepository {
     const todayIso = today.toISOString();
 
     const txs = await apiClient.getTransactions();
-    const completed = txs.filter(t => t.sender_upi === senderUpi && t.predicted_category === category && t.status === 'COMPLETED' && t.timestamp >= todayIso);
+    const completed = txs.filter(t => {
+      if (t.sender_upi !== senderUpi || t.status !== 'COMPLETED' || t.timestamp < todayIso) return false;
+      let txCategory: PredictedCategory = 'essential';
+      if (t.note === 'impulsive') {
+        txCategory = 'impulsive';
+      } else if (t.note === 'other' || t.receiver_upi === 'sunitadevi@upi' || t.receiver_upi === 'rameshkumar@upi') {
+        txCategory = 'transfers';
+      }
+      return txCategory === category;
+    });
     return completed.reduce((sum, tx) => sum + tx.amount, 0);
   }
 

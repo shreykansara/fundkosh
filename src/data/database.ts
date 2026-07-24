@@ -24,65 +24,83 @@ export const SEED_ENTITIES: Entity[] = [
   {
     id: 'usr_01',
     name: 'Aarav Sharma (Primary User)',
-    type: 'user',
+    type: 0,
     balance: 50000,
-    upi_id: 'aarav@fundkosh'
+    upi_id: 'aarav@fundkosh',
+    liabilities: [],
+    vault: { balance: 0, target_threshold: 100, total_swept: 0, flexi_rd_balance: 0, interest_rate: 7.2, total_sweeps_count: 0 }
   },
   {
     id: 'fam_01',
     name: 'Priya Sharma (Spouse)',
-    type: 'family',
+    type: 0,
     balance: 15000,
-    upi_id: 'priya@fundkosh'
+    upi_id: 'priya@fundkosh',
+    liabilities: [],
+    vault: { balance: 0, target_threshold: 100, total_swept: 0, flexi_rd_balance: 0, interest_rate: 7.2, total_sweeps_count: 0 }
   },
   {
     id: 'fam_02',
     name: 'Rohan Sharma (Child)',
-    type: 'family',
+    type: 0,
     balance: 2500,
-    upi_id: 'rohan@fundkosh'
+    upi_id: 'rohan@fundkosh',
+    liabilities: [],
+    vault: { balance: 0, target_threshold: 100, total_swept: 0, flexi_rd_balance: 0, interest_rate: 7.2, total_sweeps_count: 0 }
   },
   {
     id: 'mer_01',
     name: 'FreshMart Supermarket',
-    type: 'merchant',
+    type: 1,
     balance: 120000,
-    upi_id: 'freshmart@upi'
+    upi_id: 'freshmart@upi',
+    liabilities: [],
+    vault: { balance: 0, target_threshold: 100, total_swept: 0, flexi_rd_balance: 0, interest_rate: 7.2, total_sweeps_count: 0 }
   },
   {
     id: 'mer_02',
     name: 'PowerGrid Electric Co',
-    type: 'merchant',
+    type: 1,
     balance: 500000,
-    upi_id: 'powergrid@upi'
+    upi_id: 'powergrid@upi',
+    liabilities: [],
+    vault: { balance: 0, target_threshold: 100, total_swept: 0, flexi_rd_balance: 0, interest_rate: 7.2, total_sweeps_count: 0 }
   },
   {
     id: 'mer_03',
     name: 'GigaTech Electronics Store',
-    type: 'merchant',
+    type: 1,
     balance: 350000,
-    upi_id: 'gigatech@upi'
+    upi_id: 'gigatech@upi',
+    liabilities: [],
+    vault: { balance: 0, target_threshold: 100, total_swept: 0, flexi_rd_balance: 0, interest_rate: 7.2, total_sweeps_count: 0 }
   },
   {
     id: 'mer_04',
     name: 'Vogue Apparel & Luxury',
-    type: 'merchant',
+    type: 1,
     balance: 200000,
-    upi_id: 'vogue@upi'
+    upi_id: 'vogue@upi',
+    liabilities: [],
+    vault: { balance: 0, target_threshold: 100, total_swept: 0, flexi_rd_balance: 0, interest_rate: 7.2, total_sweeps_count: 0 }
   },
   {
     id: 'mer_05',
     name: 'The Royal Spice Gourmet',
-    type: 'merchant',
+    type: 1,
     balance: 95000,
-    upi_id: 'royalspice@upi'
+    upi_id: 'royalspice@upi',
+    liabilities: [],
+    vault: { balance: 0, target_threshold: 100, total_swept: 0, flexi_rd_balance: 0, interest_rate: 7.2, total_sweeps_count: 0 }
   },
   {
     id: 'fin_01',
     name: 'Hero FinCorp',
-    type: 'financial_institution',
+    type: 1,
     balance: 1000000,
-    upi_id: 'herofincorp@upi'
+    upi_id: 'herofincorp@upi',
+    liabilities: [],
+    vault: { balance: 0, target_threshold: 100, total_swept: 0, flexi_rd_balance: 0, interest_rate: 7.2, total_sweeps_count: 0 }
   }
 ];
 
@@ -155,4 +173,3 @@ export async function initializeDatabaseSeed(): Promise<void> {
     }
   }
 }
-

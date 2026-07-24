@@ -23,6 +23,7 @@ export class DailyBudgetCalculator {
    */
   async calculateMetrics(
     userUpi: string = 'aarav@fundkosh',
+    userId: string = 'usr_01',
     weather: WeatherCondition = 'CLEAR',
     event: LocalEventVector = 'NORMAL',
     baselineDailySpend: number = 300
@@ -30,7 +31,7 @@ export class DailyBudgetCalculator {
     const incomeForecast = this.forecaster.forecastIncome(weather, event);
     const predictedMonthlyIncome = incomeForecast.totalPredictedMonthly;
 
-    const totalActiveLiabilities = await this.liabilityRepo.getTotalLiabilitiesAmount('usr_01', 30);
+    const totalActiveLiabilities = await this.liabilityRepo.getTotalLiabilitiesAmount(userId, 30);
     const netSpendablePool = Math.max(0, predictedMonthlyIncome - totalActiveLiabilities);
 
     const daysInMonth = 30;
