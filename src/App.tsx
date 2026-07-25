@@ -59,14 +59,16 @@ import {
   X
 } from 'lucide-react';
 
+import { ReinforcementPredictor, getCurrentContext, PredictionResult } from './engine/ReinforcementModel';
+
 const paymentController = new PaymentController();
 const speedBumpEvaluator = new SpeedBumpEvaluator();
 const statePredictor = new StatePredictor();
 const budgetCalculator = new DailyBudgetCalculator();
+const reinforcementPredictor = new ReinforcementPredictor();
 
 function AppContent() {
   const { themeState, setThemeState, getThemeColors } = useRiskTheme();
-  const themeColors = getThemeColors();
 
   const [activeTab, setActiveTab] = useState<'pay' | 'budget' | 'vault' | 'ledger'>('pay');
   const [isDbReady, setIsDbReady] = useState(false);
@@ -110,6 +112,9 @@ function AppContent() {
     { title: '', amount: 0, period_days: 30, last_paid_date: new Date().toISOString().split('T')[0] }
   ]);
   const [isPersonalizing, setIsPersonalizing] = useState(false);
+
+  // AI Reinforcement Model States
+  const [activePrediction, setActivePrediction] = useState<PredictionResult | null>(null);
 
   // Verification & Payment Result Status State
   const [verificationQuery, setVerificationQuery] = useState('');
@@ -202,6 +207,23 @@ function AppContent() {
   const [cooldownLeft, setCooldownLeft] = useState<number>(0);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
+  const isBlueTheme = (activeTab !== 'pay') || (!currentUser);
+
+  const rawThemeColors = getThemeColors();
+  const themeColors = isBlueTheme ? {
+    primary: '#0284c7',
+    bgGradient: 'linear-gradient(180deg, #f0f9ff 0%, #ffffff 100%)',
+    cardBg: '#ffffff',
+    borderColor: 'rgba(2, 132, 199, 0.15)',
+    glowShadow: '0 8px 30px rgba(2, 132, 199, 0.06)',
+    badgeBg: 'rgba(2, 132, 199, 0.1)',
+    textColor: '#0284c7'
+  } : rawThemeColors;
+
+  const headerBg = isBlueTheme
+    ? '#F0F9FF'
+    : (themeState === 'GREEN' ? '#F0FDF4' : themeState === 'AMBER' ? '#FFFBEB' : '#FEF2F2');
+
   // Load Data & Run App-Launch Prediction
   const refreshAppData = async () => {
     const health = await apiClient.checkHealth();
@@ -245,8 +267,20 @@ function AppContent() {
       );
       setBudgetMetrics(bMetrics);
 
-      // Sync App Baseline Theme to Launch State
-      setThemeState(state.themeState);
+      // AI Reinforcement Launch Prediction
+      const context = getCurrentContext();
+      const prediction = reinforcementPredictor.predict(context);
+      setActivePrediction(prediction);
+
+      // Decides whether the UI theme would be GREEN, RED, or AMBER:
+      // 1. GREEN: predicted category is 'essential' (usual time for essential payments)
+      // 2. AMBER: predicted category is 'impulsive' (not usual time), but remainingDailyBudget > 0
+      // 3. RED: predicted category is 'impulsive' and remainingDailyBudget <= 0 (high risk of daily budget exceeded)
+      let mappedThemeState: RiskThemeState = 'GREEN';
+      if (prediction.category === 'impulsive') {
+        mappedThemeState = bMetrics.remainingDailyBudget > 0 ? 'AMBER' : 'RED';
+      }
+      setThemeState(mappedThemeState);
     }
   };
 
@@ -390,6 +424,12 @@ function AppContent() {
       setCooldownLeft(result.evaluationResult.suggestedCooldownSeconds);
       setStatusMessage('⚡ Speed-Bump Intercept Triggered! Take a moment to reflect.');
     } else if (result.status === 'COMPLETED') {
+      // Run AI Reinforcement Predictor update if category is essential or impulsive (no update for emi or other)
+      if (note === 'essential' || note === 'impulsive') {
+        const context = getCurrentContext();
+        reinforcementPredictor.update(context, note);
+      }
+
       const nextMultipleOf10 = Math.ceil(amount / 10) * 10;
       const roundUp = (optInRoundUp && nextMultipleOf10 > amount) ? nextMultipleOf10 - amount : 0;
       let msg = `✅ Payment of ₹${amount.toLocaleString()} completed!`;
@@ -538,7 +578,7 @@ function AppContent() {
     return (
       <div style={{ ...styles.appShell, background: themeColors.bgGradient, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: 20 }}>
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          <h1 style={{ ...styles.title, fontSize: 36, color: '#006C49' }}>FundKosh</h1>
+          <h1 style={{ ...styles.title, fontSize: 36, color: themeColors.primary }}>FundKosh</h1>
           <p style={{ ...styles.description, fontSize: 14 }}>Dynamic Cash Management & Sahayak Friction Engine</p>
         </div>
 
@@ -572,7 +612,7 @@ function AppContent() {
                       width: 40, 
                       height: 40, 
                       borderRadius: '50%', 
-                      backgroundColor: '#006C49', 
+                      backgroundColor: themeColors.primary, 
                       color: '#ffffff', 
                       display: 'flex', 
                       alignItems: 'center', 
@@ -589,7 +629,7 @@ function AppContent() {
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <span style={{ fontSize: 10, color: '#64748b', display: 'block' }}>Balance</span>
-                    <span style={{ ...styles.balanceText, fontSize: 14 }}>₹{user.balance.toLocaleString()}</span>
+                    <span style={{ ...styles.balanceText, fontSize: 14, color: themeColors.primary }}>₹{user.balance.toLocaleString()}</span>
                   </div>
                 </div>
               ))}
@@ -600,7 +640,7 @@ function AppContent() {
                 onClick={() => setShowCreateAccountWizard(true)}
                 style={{
                   ...styles.submitBtn, 
-                  backgroundColor: '#006C49', 
+                  backgroundColor: themeColors.primary, 
                   width: '100%', 
                   fontSize: 14, 
                   display: 'flex', 
@@ -630,7 +670,7 @@ function AppContent() {
                   }} 
                   style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}
                 >
-                  <ArrowLeft size={18} color="#006C49" />
+                  <ArrowLeft size={18} color={themeColors.primary} />
                 </button>
                 <div style={{ flex: 1 }}>
                   <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#0f172a' }}>
@@ -702,16 +742,16 @@ function AppContent() {
                   <div style={{ 
                     textAlign: 'center', 
                     padding: 16, 
-                    backgroundColor: '#f0fdf4', 
+                    backgroundColor: themeColors.badgeBg, 
                     borderRadius: 10, 
-                    border: '1px solid #bbf7d0',
+                    border: '1px solid ' + themeColors.borderColor,
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
                     gap: 10
                   }}>
-                    <Activity className="animate-spin" size={24} color="#16a34a" />
-                    <span style={{ fontSize: 12, fontWeight: 600, color: '#16a34a' }}>
+                    <Activity className="animate-spin" size={24} color={themeColors.primary} />
+                    <span style={{ fontSize: 12, fontWeight: 600, color: themeColors.textColor }}>
                       {smsVerificationMessage}
                     </span>
                   </div>
@@ -729,7 +769,7 @@ function AppContent() {
                           setOtpSent(true);
                           setOtpValue('1234'); // Auto fill verification OTP value
                         }}
-                        style={{ ...styles.submitBtn, backgroundColor: '#006C49', width: '100%' }}
+                        style={{ ...styles.submitBtn, backgroundColor: themeColors.primary, width: '100%' }}
                       >
                         Send Verification OTP
                       </button>
@@ -743,7 +783,7 @@ function AppContent() {
                           setIsOtpVerified(true);
                           setIsSmsVerifying(true);
                         }}
-                        style={{ ...styles.submitBtn, backgroundColor: '#16a34a', width: '100%' }}
+                        style={{ ...styles.submitBtn, backgroundColor: themeColors.primary, width: '100%' }}
                       >
                         Verify OTP & Link Bank
                       </button>
@@ -757,7 +797,7 @@ function AppContent() {
             {wizardStep === 2 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div style={{ textAlign: 'center', margin: '8px 0' }}>
-                  <span style={{ fontSize: 24, fontWeight: 800, color: '#006C49' }}>💵 Monthly Earnings</span>
+                  <span style={{ fontSize: 24, fontWeight: 800, color: themeColors.primary }}>💵 Monthly Earnings</span>
                   <p style={{ ...styles.description, marginTop: 4 }}>Enter your average monthly take-home income or salary.</p>
                 </div>
 
@@ -782,7 +822,7 @@ function AppContent() {
                     }
                     setWizardStep(3);
                   }}
-                  style={{ ...styles.submitBtn, backgroundColor: '#006C49', width: '100%' }}
+                  style={{ ...styles.submitBtn, backgroundColor: themeColors.primary, width: '100%' }}
                 >
                   Next: Fixed Payments ➔
                 </button>
@@ -793,7 +833,7 @@ function AppContent() {
             {wizardStep === 3 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ textAlign: 'center', marginBottom: 6 }}>
-                  <span style={{ fontSize: 24, fontWeight: 800, color: '#991b1b' }}>💳 Fixed Payments</span>
+                  <span style={{ fontSize: 24, fontWeight: 800, color: themeColors.primary }}>💳 Fixed Payments</span>
                   <p style={{ ...styles.description, marginTop: 4 }}>Add your active EMIs, rent, subscriptions, or family allowance payouts.</p>
                 </div>
 
@@ -902,8 +942,8 @@ function AppContent() {
                   onClick={() => setCustomLiabilities([...customLiabilities, { title: '', amount: 0, period_days: 30, last_paid_date: new Date().toISOString().split('T')[0] }])}
                   style={{
                     backgroundColor: '#f1f5f9',
-                    color: '#006C49',
-                    border: '1px dashed #006C49',
+                    color: themeColors.primary,
+                    border: '1px dashed ' + themeColors.primary,
                     borderRadius: 8,
                     padding: '8px',
                     fontSize: 12,
@@ -917,7 +957,7 @@ function AppContent() {
 
                 <button
                   onClick={() => setWizardStep(4)}
-                  style={{ ...styles.submitBtn, backgroundColor: '#006C49', width: '100%', marginTop: 12 }}
+                  style={{ ...styles.submitBtn, backgroundColor: themeColors.primary, width: '100%', marginTop: 12 }}
                 >
                   Next: Setup Flexi-RD ➔
                 </button>
@@ -928,7 +968,7 @@ function AppContent() {
             {wizardStep === 4 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div style={{ textAlign: 'center', marginBottom: 6 }}>
-                  <span style={{ fontSize: 24, fontWeight: 800, color: '#006C49' }}>🐖 Flexi-RD Setup</span>
+                  <span style={{ fontSize: 24, fontWeight: 800, color: themeColors.primary }}>🐖 Flexi-RD Setup</span>
                   <p style={{ ...styles.description, marginTop: 4 }}>Configure your automated round-up savings and sweep threshold.</p>
                 </div>
 
@@ -948,9 +988,9 @@ function AppContent() {
                           flex: 1,
                           padding: '10px 0',
                           borderRadius: 8,
-                          border: newUserThreshold === val ? '2px solid #006C49' : '1px solid #cbd5e1',
-                          backgroundColor: newUserThreshold === val ? '#E6F4EA' : '#ffffff',
-                          color: newUserThreshold === val ? '#006C49' : '#475569',
+                          border: newUserThreshold === val ? '2px solid ' + themeColors.primary : '1px solid #cbd5e1',
+                          backgroundColor: newUserThreshold === val ? themeColors.badgeBg : '#ffffff',
+                          color: newUserThreshold === val ? themeColors.textColor : '#475569',
                           fontWeight: 700,
                           fontSize: 12,
                           cursor: 'pointer'
@@ -964,7 +1004,7 @@ function AppContent() {
 
                 <button
                   onClick={handleCreateAccount}
-                  style={{ ...styles.submitBtn, backgroundColor: '#16a34a', width: '100%', marginTop: 8 }}
+                  style={{ ...styles.submitBtn, backgroundColor: themeColors.primary, width: '100%', marginTop: 8 }}
                 >
                   Personalize my FundKosh ➔
                 </button>
@@ -981,9 +1021,9 @@ function AppContent() {
                 alignItems: 'center', 
                 gap: 16 
               }}>
-                <Sparkles className="animate-pulse" size={48} color="#006C49" />
+                <Sparkles className="animate-pulse" size={48} color={themeColors.primary} />
                 <div>
-                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#006C49' }}>
+                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: themeColors.primary }}>
                     Personalizing FundKosh...
                   </h3>
                   <p style={{ ...styles.description, marginTop: 6, fontSize: 12, lineHeight: '1.5' }}>
@@ -991,7 +1031,7 @@ function AppContent() {
                   </p>
                 </div>
                 <div style={{ width: '100%', height: 4, backgroundColor: '#f1f5f9', borderRadius: 2, overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: '70%', backgroundColor: '#006C49', borderRadius: 2 }} className="animate-bounce" />
+                  <div style={{ height: '100%', width: '70%', backgroundColor: themeColors.primary, borderRadius: 2 }} className="animate-bounce" />
                 </div>
               </div>
             )}
@@ -1005,10 +1045,10 @@ function AppContent() {
   const selectedReceiver = entities.find(e => e.upi_id === receiverUpi);
 
   return (
-    <div style={{ ...styles.appShell, background: '#F0FDF4' }}>
+    <div style={{ ...styles.appShell, background: headerBg }}>
       
       {/* Mobile Top Header */}
-      <header style={{ ...styles.header, borderBottom: 'none', backgroundColor: '#F0FDF4', padding: '16px 16px 8px 16px' }}>
+      <header style={{ ...styles.header, borderBottom: 'none', backgroundColor: headerBg, padding: '16px 16px 8px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {/* User Profile Avatar */}
           <div style={{ 
@@ -1016,18 +1056,18 @@ function AppContent() {
             height: 44, 
             borderRadius: '50%', 
             overflow: 'hidden',
-            border: '2px solid #006C49',
+            border: '2px solid ' + themeColors.primary,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             backgroundColor: '#ffffff'
           }}>
-            <div style={{ color: '#006C49', fontWeight: 700, fontSize: 16 }}>
+            <div style={{ color: themeColors.primary, fontWeight: 700, fontSize: 16 }}>
               {currentUser.name[0]}
             </div>
           </div>
           <div>
-            <h1 style={{ fontSize: 16, fontWeight: 700, color: '#006C49', margin: 0 }}>
+            <h1 style={{ fontSize: 16, fontWeight: 700, color: themeColors.primary, margin: 0 }}>
               Namaste, {currentUser.name.split(' ')[0]} Ji!
             </h1>
             <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginTop: 2 }}>
@@ -1038,9 +1078,11 @@ function AppContent() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ ...styles.themeStateChip, backgroundColor: themeColors.badgeBg, color: themeColors.textColor, fontSize: 9 }}>
-            🛡️ {themeState}
-          </span>
+          {activeTab === 'pay' && (
+            <span style={{ ...styles.themeStateChip, backgroundColor: themeColors.badgeBg, color: themeColors.textColor, fontSize: 9 }}>
+              🛡️ {themeState}
+            </span>
+          )}
         </div>
       </header>
 
@@ -1104,6 +1146,8 @@ function AppContent() {
                 Small Finance Bank •••• 8829
               </div>
             </div>
+
+            {/* AI prediction model runs silently in the background to set the UI theme colors */}
 
             {/* Scan QR Code Button */}
             <button 
@@ -1272,7 +1316,7 @@ function AppContent() {
                   width: 48, 
                   height: 48, 
                   borderRadius: '50%', 
-                  backgroundColor: '#006C49', 
+                  backgroundColor: themeColors.primary, 
                   color: '#ffffff', 
                   display: 'flex', 
                   alignItems: 'center', 
@@ -1285,7 +1329,7 @@ function AppContent() {
                 <div>
                   <h3 style={{ ...styles.cardTitle, fontSize: 16, marginBottom: 4 }}>{currentUser.name}</h3>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    <span style={getTypeStyle(currentUser.type)}>{currentUser.type === 0 ? 'USER' : 'MERCHANT'}</span>
+                    <span style={getTypeStyle(currentUser.type, activeTab !== 'pay')}>{currentUser.type === 0 ? 'USER' : 'MERCHANT'}</span>
                     <span style={{ fontSize: 11, color: '#64748b' }}>{currentUser.upi_id}</span>
                   </div>
                 </div>
@@ -1314,26 +1358,26 @@ function AppContent() {
             {budgetMetrics && (
               <div style={styles.card}>
                 <div style={styles.cardHeader}>
-                  <TrendingUp size={20} color="#10b981" />
+                  <TrendingUp size={20} color={themeColors.primary} />
                   <h2 style={styles.cardTitle}>Daily Budget Engine</h2>
                 </div>
 
                 <div style={styles.budgetFormulaGrid}>
                   <div style={styles.budgetBox}>
                     <span style={{ fontSize: 11, color: '#475569' }}>Est. Monthly Income</span>
-                    <span style={{ fontSize: 18, fontWeight: 700, color: '#006C49' }}>
+                    <span style={{ fontSize: 18, fontWeight: 700, color: themeColors.primary }}>
                       ₹{budgetMetrics.predictedMonthlyIncome.toLocaleString()}
                     </span>
                   </div>
                   <div style={styles.budgetBox}>
                     <span style={{ fontSize: 11, color: '#475569' }}>Fixed Bills (30d)</span>
-                    <span style={{ fontSize: 18, fontWeight: 700, color: '#dc2626' }}>
+                    <span style={{ fontSize: 18, fontWeight: 700, color: themeColors.primary }}>
                       - ₹{budgetMetrics.totalActiveLiabilities.toLocaleString()}
                     </span>
                   </div>
-                  <div style={{ ...styles.budgetBox, borderColor: '#16a34a' }}>
-                    <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 600 }}>Daily Limit</span>
-                    <span style={{ fontSize: 20, fontWeight: 800, color: '#16a34a' }}>
+                  <div style={{ ...styles.budgetBox, borderColor: themeColors.borderColor }}>
+                    <span style={{ fontSize: 11, color: themeColors.textColor, fontWeight: 600 }}>Daily Limit</span>
+                    <span style={{ fontSize: 20, fontWeight: 800, color: themeColors.primary }}>
                       ₹{budgetMetrics.dailySpendableLimit.toLocaleString()}
                     </span>
                   </div>
@@ -1350,10 +1394,10 @@ function AppContent() {
                     <div style={{
                       ...styles.progressBarFill,
                       width: `${Math.min(100, (budgetMetrics.todaySpent / budgetMetrics.dailySpendableLimit) * 100)}%`,
-                      backgroundColor: budgetMetrics.remainingDailyBudget > 0 ? '#16a34a' : '#dc2626'
+                      backgroundColor: themeColors.primary
                     }} />
                   </div>
-                  <span style={{ fontSize: 12, color: budgetMetrics.remainingDailyBudget > 0 ? '#16a34a' : '#dc2626', display: 'block', marginTop: 6, fontWeight: 600 }}>
+                  <span style={{ fontSize: 12, color: themeColors.textColor, display: 'block', marginTop: 6, fontWeight: 600 }}>
                     Remaining Budget Buffer: ₹{budgetMetrics.remainingDailyBudget.toLocaleString()}
                   </span>
                 </div>
@@ -1363,7 +1407,7 @@ function AppContent() {
             {/* Active Liabilities Table */}
             <div style={styles.card}>
               <div style={styles.cardHeader}>
-                <Calendar size={20} color="#d97706" />
+                <Calendar size={20} color={themeColors.primary} />
                 <h2 style={styles.cardTitle}>Upcoming Fixed Obligations</h2>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -1373,7 +1417,7 @@ function AppContent() {
                       <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{liab.title}</span>
                       <span style={{ fontSize: 11, color: '#475569', marginLeft: 8 }}>Due in {liab.due_in_days} days</span>
                     </div>
-                    <span style={{ fontSize: 14, fontWeight: 700, color: '#dc2626' }}>₹{liab.amount.toLocaleString()}</span>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: themeColors.primary }}>₹{liab.amount.toLocaleString()}</span>
                   </div>
                 ))}
               </div>
@@ -1397,7 +1441,7 @@ function AppContent() {
               boxSizing: 'border-box' 
             }}>
               <div style={styles.cardHeader}>
-                <PiggyBank size={22} color="#16a34a" />
+                <PiggyBank size={22} color={themeColors.primary} />
                 <h2 style={{ ...styles.cardTitle, fontSize: 16 }}>Automated Round-Up Vault</h2>
               </div>
               
@@ -1415,8 +1459,8 @@ function AppContent() {
                   return (
                     <div style={{ 
                       ...styles.budgetBox, 
-                      backgroundColor: '#f0fdf4', 
-                      borderColor: '#bbf7d0',
+                      backgroundColor: themeColors.badgeBg, 
+                      borderColor: themeColors.borderColor,
                       padding: '14px 12px',
                       display: 'flex',
                       flexDirection: 'column',
@@ -1424,17 +1468,17 @@ function AppContent() {
                       minHeight: 120
                     }}>
                       <div>
-                        <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 700, display: 'block' }}>Spare Change</span>
-                        <span style={{ fontSize: 28, fontWeight: 900, color: '#006C49', display: 'block', margin: '4px 0' }}>
+                        <span style={{ fontSize: 12, color: themeColors.textColor, fontWeight: 700, display: 'block' }}>Spare Change</span>
+                        <span style={{ fontSize: 28, fontWeight: 900, color: themeColors.primary, display: 'block', margin: '4px 0' }}>
                           ₹{balance.toLocaleString()}
                         </span>
                       </div>
                       <div>
-                        <span style={{ fontSize: 10, color: '#16a34a', fontWeight: 600 }}>Sweep Progress: {percent}%</span>
-                        <div style={{ height: 6, backgroundColor: '#bbf7d0', borderRadius: 3, overflow: 'hidden', marginTop: 4 }}>
-                          <div style={{ width: `${percent}%`, height: '100%', backgroundColor: '#006C49', borderRadius: 3 }}></div>
+                        <span style={{ fontSize: 10, color: themeColors.textColor, fontWeight: 600 }}>Sweep Progress: {percent}%</span>
+                        <div style={{ height: 6, backgroundColor: themeColors.borderColor, borderRadius: 3, overflow: 'hidden', marginTop: 4 }}>
+                          <div style={{ width: `${percent}%`, height: '100%', backgroundColor: themeColors.primary, borderRadius: 3 }}></div>
                         </div>
-                        <span style={{ fontSize: 9, color: '#16a34a', display: 'block', marginTop: 4 }}>Target: ₹{threshold}</span>
+                        <span style={{ fontSize: 9, color: themeColors.textColor, display: 'block', marginTop: 4 }}>Target: ₹{threshold}</span>
                       </div>
                     </div>
                   );
@@ -1442,8 +1486,8 @@ function AppContent() {
 
                 <div style={{ 
                   ...styles.budgetBox, 
-                  backgroundColor: '#faf5ff', 
-                  borderColor: '#e9d5ff',
+                  backgroundColor: themeColors.badgeBg, 
+                  borderColor: themeColors.borderColor,
                   padding: '14px 12px',
                   display: 'flex',
                   flexDirection: 'column',
@@ -1451,14 +1495,14 @@ function AppContent() {
                   minHeight: 120
                 }}>
                   <div>
-                    <span style={{ fontSize: 12, color: '#7c3aed', fontWeight: 700, display: 'block' }}>Flexi-RD Savings</span>
-                    <span style={{ fontSize: 28, fontWeight: 900, color: '#7c3aed', display: 'block', margin: '4px 0' }}>
+                    <span style={{ fontSize: 12, color: themeColors.textColor, fontWeight: 700, display: 'block' }}>Flexi-RD Savings</span>
+                    <span style={{ fontSize: 28, fontWeight: 900, color: themeColors.primary, display: 'block', margin: '4px 0' }}>
                       ₹{(vaultData?.flexi_rd_balance || 0).toLocaleString()}
                     </span>
                   </div>
                   <div>
-                    <span style={{ fontSize: 11, color: '#7c3aed', fontWeight: 700, display: 'block' }}>7.2% Per Annum</span>
-                    <span style={{ fontSize: 10, color: '#9d3fe7', display: 'block', marginTop: 2 }}>Sweeps Completed: {vaultData?.total_sweeps_count || 0}</span>
+                    <span style={{ fontSize: 11, color: themeColors.textColor, fontWeight: 700, display: 'block' }}>7.2% Per Annum</span>
+                    <span style={{ fontSize: 10, color: themeColors.textColor, display: 'block', marginTop: 2 }}>Sweeps Completed: {vaultData?.total_sweeps_count || 0}</span>
                   </div>
                 </div>
               </div>
@@ -1482,7 +1526,7 @@ function AppContent() {
                         cursor: 'pointer',
                         justifyContent: 'center',
                         ...(vaultData?.target_threshold === val 
-                          ? { backgroundColor: '#006C49', borderColor: '#006C49', color: '#ffffff' } 
+                          ? { backgroundColor: themeColors.primary, borderColor: themeColors.primary, color: '#ffffff' } 
                           : { backgroundColor: '#ffffff', borderColor: '#cbd5e1', color: '#475569' }
                         )
                       }}
@@ -1498,7 +1542,7 @@ function AppContent() {
                 onClick={handleManualSweep}
                 style={{ 
                   ...styles.submitBtn, 
-                  backgroundColor: '#006C49', 
+                  backgroundColor: themeColors.primary, 
                   marginTop: 'auto',
                   padding: 14,
                   fontSize: 14,
@@ -1507,7 +1551,7 @@ function AppContent() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: 8,
-                  boxShadow: '0 4px 12px rgba(0, 108, 73, 0.15)'
+                  boxShadow: activeTab === 'pay' ? '0 4px 12px rgba(0, 108, 73, 0.15)' : '0 4px 12px rgba(2, 132, 199, 0.15)'
                 }}
               >
                 <PiggyBank size={18} /> Execute Manual Sweep to 7.2% Flexi-RD
@@ -1524,7 +1568,7 @@ function AppContent() {
             {/* Audit Log */}
             <div style={styles.card}>
               <div style={styles.cardHeader}>
-                <Activity size={20} color="#006C49" />
+                <Activity size={20} color={themeColors.primary} />
                 <h2 style={styles.cardTitle}>Transaction History</h2>
               </div>
               <div style={styles.txList}>
@@ -1550,11 +1594,11 @@ function AppContent() {
                       
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={getStatusBadgeStyle(tx.status)}>{tx.status}</span>
-                          <span style={getPredictedCategoryBadge(tx.note === 'other' ? 'transfers' : (tx.note || 'essential'))}>
+                          <span style={getStatusBadgeStyle(tx.status, activeTab !== 'pay')}>{tx.status}</span>
+                          <span style={getPredictedCategoryBadge(tx.note === 'other' ? 'transfers' : (tx.note || 'essential'), activeTab !== 'pay')}>
                             {tx.note === 'other' ? 'transfers' : (tx.note || 'essential')}
                           </span>
-                          <span style={{ fontSize: 10, fontWeight: 700, color: getRiskColor(tx.risk_score) }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: getRiskColor(tx.risk_score, activeTab !== 'pay') }}>
                             Score: {tx.risk_score}
                           </span>
                         </div>
@@ -1584,10 +1628,10 @@ function AppContent() {
           width: 48,
           height: 48,
           borderRadius: '50%',
-          backgroundColor: '#006C49',
+          backgroundColor: themeColors.primary,
           color: '#ffffff',
           border: 'none',
-          boxShadow: '0 4px 10px rgba(0, 108, 73, 0.3)',
+          boxShadow: activeTab === 'pay' ? '0 4px 10px rgba(0, 108, 73, 0.3)' : '0 4px 10px rgba(2, 132, 199, 0.3)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -2669,7 +2713,10 @@ export default function App() {
 }
 
 // Helper Badge Styles
-function getTypeStyle(type: number): React.CSSProperties {
+function getTypeStyle(type: number, isBlueTheme?: boolean): React.CSSProperties {
+  if (isBlueTheme) {
+    return { backgroundColor: '#e0f2fe', color: '#0369a1', padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700 };
+  }
   switch (type) {
     case 0: return { backgroundColor: '#eff6ff', color: '#2563eb', padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700 };
     case 1: return { backgroundColor: '#faf5ff', color: '#7c3aed', padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700 };
@@ -2677,7 +2724,10 @@ function getTypeStyle(type: number): React.CSSProperties {
   }
 }
 
-function getPredictedCategoryBadge(category: string): React.CSSProperties {
+function getPredictedCategoryBadge(category: string, isBlueTheme?: boolean): React.CSSProperties {
+  if (isBlueTheme) {
+    return { backgroundColor: '#e0f2fe', color: '#0369a1', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700 };
+  }
   switch (category) {
     case 'essential': return { backgroundColor: '#f0fdf4', color: '#16a34a', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700 };
     case 'impulsive': return { backgroundColor: '#fff1f2', color: '#e11d48', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700 };
@@ -2686,7 +2736,10 @@ function getPredictedCategoryBadge(category: string): React.CSSProperties {
   }
 }
 
-function getStatusBadgeStyle(status: string): React.CSSProperties {
+function getStatusBadgeStyle(status: string, isBlueTheme?: boolean): React.CSSProperties {
+  if (isBlueTheme) {
+    return { backgroundColor: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', padding: '2px 6px', borderRadius: 12, fontSize: 10, fontWeight: 700 };
+  }
   switch (status) {
     case 'COMPLETED': return { backgroundColor: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', padding: '2px 6px', borderRadius: 12, fontSize: 10, fontWeight: 700 };
     case 'SPEED_BUMP_REQUIRED': return { backgroundColor: '#fef3c7', color: '#d97706', border: '1px solid #fde68a', padding: '2px 6px', borderRadius: 12, fontSize: 10, fontWeight: 700 };
@@ -2695,7 +2748,8 @@ function getStatusBadgeStyle(status: string): React.CSSProperties {
   }
 }
 
-function getRiskColor(score: number): string {
+function getRiskColor(score: number, isBlueTheme?: boolean): string {
+  if (isBlueTheme) return '#0284c7';
   if (score >= 60) return '#dc2626';
   if (score >= 35) return '#d97706';
   return '#16a34a';
