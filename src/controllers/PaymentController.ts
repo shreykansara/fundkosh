@@ -51,7 +51,8 @@ export class PaymentController {
     note?: 'essential' | 'impulsive' | 'other' | 'emi',
     weather: WeatherCondition = 'CLEAR',
     event: LocalEventVector = 'NORMAL',
-    bypassSpeedBump: boolean = false
+    bypassSpeedBump: boolean = false,
+    roundUpOptIn: boolean = true
   ): Promise<PaymentInitiationResult> {
     try {
       const sender = await this.entityRepo.getEntityByUpi(senderUpi);
@@ -76,13 +77,14 @@ export class PaymentController {
         evalResult.requiresSpeedBump = false;
       }
 
-      const totalDeduction = amount + evalResult.roundUpAmount;
+      const roundUpAmount = roundUpOptIn ? evalResult.roundUpAmount : 0;
+      const totalDeduction = amount + roundUpAmount;
       if (sender.balance < totalDeduction) {
-        throw new Error(`Insufficient funds: Balance ₹${sender.balance.toLocaleString()}, required ₹${totalDeduction.toLocaleString()} (₹${amount} + ₹${evalResult.roundUpAmount} round-up).`);
+        throw new Error(`Insufficient funds: Balance ₹${sender.balance.toLocaleString()}, required ₹${totalDeduction.toLocaleString()} (₹${amount} + ₹${roundUpAmount} round-up).`);
       }
 
       const txId = 'tx_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
-      const transaction: Transaction = {
+      const transaction: Transaction & { roundUpOptOut?: boolean } = {
         id: txId,
         sender_upi: senderUpi,
         receiver_upi: receiverUpi,
@@ -91,7 +93,8 @@ export class PaymentController {
         risk_score: evalResult.riskScore,
         status: evalResult.requiresSpeedBump ? 'SPEED_BUMP_REQUIRED' : 'PENDING',
         speed_bump_reason: originalRequiresSpeedBump ? evalResult.reasons.join(' | ') : undefined,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        roundUpOptOut: !roundUpOptIn
       };
 
       // Store transaction in audit ledger

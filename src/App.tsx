@@ -14,7 +14,8 @@ import {
   PredictiveUserState,
   DailyBudgetMetrics,
   VaultState,
-  FlexiRDAccount
+  FlexiRDAccount,
+  RiskThemeState
 } from './domain/models';
 import { PaymentController } from './controllers/PaymentController';
 import { SpeedBumpEvaluator } from './engine/SpeedBumpEvaluator';
@@ -222,7 +223,7 @@ function AppContent() {
 
   const headerBg = isBlueTheme
     ? '#F0F9FF'
-    : (themeState === 'GREEN' ? '#F0FDF4' : themeState === 'AMBER' ? '#FFFBEB' : '#FEF2F2');
+    : (themeState === 'GREEN' ? '#e0f2e9' : themeState === 'AMBER' ? '#EEE7E3' : '#FBEBE9');
 
   // Load Data & Run App-Launch Prediction
   const refreshAppData = async () => {
@@ -1078,11 +1079,6 @@ function AppContent() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {activeTab === 'pay' && (
-            <span style={{ ...styles.themeStateChip, backgroundColor: themeColors.badgeBg, color: themeColors.textColor, fontSize: 9 }}>
-              🛡️ {themeState}
-            </span>
-          )}
         </div>
       </header>
 
@@ -1096,7 +1092,7 @@ function AppContent() {
             {/* Primary Account Balance Card */}
             <div style={{ 
               ...styles.card, 
-              borderLeft: '4px solid #006C49', 
+              borderLeft: '4px solid ' + themeColors.primary, 
               padding: '16px 20px',
               position: 'relative',
               boxShadow: '0 4px 12px rgba(0, 0, 0, 0.02)',
@@ -1109,8 +1105,8 @@ function AppContent() {
                 <span style={{ 
                   fontSize: 10, 
                   fontWeight: 700, 
-                  color: '#006C49', 
-                  backgroundColor: '#E6F4EA', 
+                  color: themeColors.textColor, 
+                  backgroundColor: themeColors.badgeBg, 
                   padding: '3px 8px', 
                   borderRadius: 6,
                   display: 'flex',
@@ -1128,8 +1124,8 @@ function AppContent() {
                 <button 
                   onClick={() => setShowBalance(!showBalance)}
                   style={{ 
-                    backgroundColor: '#E6F4EA', 
-                    color: '#006C49', 
+                    backgroundColor: themeColors.badgeBg, 
+                    color: themeColors.textColor, 
                     border: 'none', 
                     borderRadius: 16, 
                     padding: '4px 12px', 
@@ -1154,7 +1150,7 @@ function AppContent() {
               onClick={() => handleOpenPaymentModal('UPI')}
               style={{
                 width: '100%',
-                backgroundColor: '#16a34a',
+                backgroundColor: themeColors.primary,
                 color: '#ffffff',
                 border: 'none',
                 borderRadius: 12,
@@ -1166,7 +1162,7 @@ function AppContent() {
                 justifyContent: 'center',
                 gap: 8,
                 cursor: 'pointer',
-                boxShadow: '0 4px 12px rgba(22, 163, 74, 0.2)',
+                boxShadow: themeColors.glowShadow,
                 marginBottom: 4
               }}
             >
@@ -1181,12 +1177,12 @@ function AppContent() {
                   width: 56, 
                   height: 56, 
                   borderRadius: '50%', 
-                  backgroundColor: '#16a34a', 
+                  backgroundColor: themeColors.primary, 
                   display: 'flex', 
                   alignItems: 'center', 
                   justifyContent: 'center', 
                   color: '#ffffff',
-                  boxShadow: '0 4px 12px rgba(22, 163, 74, 0.15)'
+                  boxShadow: themeColors.glowShadow
                 }}>
                   <Phone size={22} />
                 </div>
@@ -1198,12 +1194,12 @@ function AppContent() {
                   width: 56, 
                   height: 56, 
                   borderRadius: '50%', 
-                  backgroundColor: '#16a34a', 
+                  backgroundColor: themeColors.primary, 
                   display: 'flex', 
                   alignItems: 'center', 
                   justifyContent: 'center', 
                   color: '#ffffff',
-                  boxShadow: '0 4px 12px rgba(22, 163, 74, 0.15)'
+                  boxShadow: themeColors.glowShadow
                 }}>
                   <AtSign size={22} />
                 </div>
@@ -1229,9 +1225,9 @@ function AppContent() {
             </div>
 
             {/* Chillar Vault Card */}
-            <div style={{ ...styles.card, padding: 16, border: '1px solid #e2e8f0', marginBottom: 4, position: 'relative', overflow: 'hidden' }}>
+            <div style={{ ...styles.card, padding: 16, border: '1px solid ' + themeColors.borderColor, marginBottom: 4, position: 'relative', overflow: 'hidden' }}>
               <div style={{ position: 'absolute', right: 10, top: 10, opacity: 0.04, pointerEvents: 'none' }}>
-                <PiggyBank size={90} color="#006C49" />
+                <PiggyBank size={90} color={themeColors.primary} />
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
@@ -1239,15 +1235,15 @@ function AppContent() {
                   width: 38, 
                   height: 38, 
                   borderRadius: '50%', 
-                  backgroundColor: '#E6F4EA', 
+                  backgroundColor: themeColors.badgeBg, 
                   display: 'flex', 
                   alignItems: 'center', 
                   justifyContent: 'center', 
-                  color: '#006C49' 
+                  color: themeColors.textColor
                 }}>
                   <PiggyBank size={20} />
                 </div>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: '#006C49', margin: 0 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: themeColors.textColor, margin: 0 }}>
                   Chillar Vault
                 </h3>
               </div>
@@ -1257,7 +1253,7 @@ function AppContent() {
               </p>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, fontWeight: 700, marginBottom: 6 }}>
-                <span style={{ color: '#006C49' }}>
+                <span style={{ color: themeColors.textColor }}>
                   ₹ {vaultData?.balance || 0} Saved
                 </span>
                 <span style={{ color: '#64748b', fontSize: 11 }}>
@@ -1270,7 +1266,7 @@ function AppContent() {
                   ...styles.progressBarFill,
                   height: '100%',
                   width: `${Math.min(100, ((vaultData?.balance || 0) / (vaultData?.target_threshold || 100)) * 100)}%`,
-                  backgroundColor: '#16a34a',
+                  backgroundColor: themeColors.primary,
                   borderRadius: 4
                 }} />
               </div>
@@ -1278,12 +1274,12 @@ function AppContent() {
               <div style={{ 
                 display: 'flex', 
                 gap: 8, 
-                backgroundColor: '#F0FDF4', 
-                border: '1px solid #bbf7d0', 
+                backgroundColor: themeColors.badgeBg, 
+                border: '1px solid ' + themeColors.borderColor, 
                 borderRadius: 8, 
                 padding: '10px', 
                 fontSize: 11, 
-                color: '#16a34a', 
+                color: themeColors.textColor, 
                 alignItems: 'flex-start',
                 lineHeight: '1.4'
               }}>
@@ -1329,7 +1325,7 @@ function AppContent() {
                 <div>
                   <h3 style={{ ...styles.cardTitle, fontSize: 16, marginBottom: 4 }}>{currentUser.name}</h3>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    <span style={getTypeStyle(currentUser.type, activeTab !== 'pay')}>{currentUser.type === 0 ? 'USER' : 'MERCHANT'}</span>
+                    <span style={getTypeStyle(currentUser.type, isBlueTheme)}>{currentUser.type === 0 ? 'USER' : 'MERCHANT'}</span>
                     <span style={{ fontSize: 11, color: '#64748b' }}>{currentUser.upi_id}</span>
                   </div>
                 </div>
@@ -1551,7 +1547,7 @@ function AppContent() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: 8,
-                  boxShadow: activeTab === 'pay' ? '0 4px 12px rgba(0, 108, 73, 0.15)' : '0 4px 12px rgba(2, 132, 199, 0.15)'
+                  boxShadow: themeColors.glowShadow
                 }}
               >
                 <PiggyBank size={18} /> Execute Manual Sweep to 7.2% Flexi-RD
@@ -1594,11 +1590,11 @@ function AppContent() {
                       
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={getStatusBadgeStyle(tx.status, activeTab !== 'pay')}>{tx.status}</span>
-                          <span style={getPredictedCategoryBadge(tx.note === 'other' ? 'transfers' : (tx.note || 'essential'), activeTab !== 'pay')}>
+                          <span style={getStatusBadgeStyle(tx.status, isBlueTheme)}>{tx.status}</span>
+                          <span style={getPredictedCategoryBadge(tx.note === 'other' ? 'transfers' : (tx.note || 'essential'), isBlueTheme)}>
                             {tx.note === 'other' ? 'transfers' : (tx.note || 'essential')}
                           </span>
-                          <span style={{ fontSize: 10, fontWeight: 700, color: getRiskColor(tx.risk_score, activeTab !== 'pay') }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: getRiskColor(tx.risk_score, isBlueTheme) }}>
                             Score: {tx.risk_score}
                           </span>
                         </div>
@@ -1631,7 +1627,7 @@ function AppContent() {
           backgroundColor: themeColors.primary,
           color: '#ffffff',
           border: 'none',
-          boxShadow: activeTab === 'pay' ? '0 4px 10px rgba(0, 108, 73, 0.3)' : '0 4px 10px rgba(2, 132, 199, 0.3)',
+          boxShadow: themeColors.glowShadow,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -1725,6 +1721,39 @@ function AppContent() {
                   ))}
                 </div>
               </div>
+
+              <div>
+                <label style={styles.label}>Presentation Theme Override (Forces Home Page color)</label>
+                <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                  {(['GREEN', 'AMBER', 'RED'] as const).map(t => (
+                    <button 
+                      key={t}
+                      type="button"
+                      onClick={() => setThemeState(t)}
+                      style={{
+                        ...styles.vectorBtn,
+                        flex: 1,
+                        padding: '10px 0',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        justifyContent: 'center',
+                        ...(themeState === t 
+                          ? { 
+                              backgroundColor: t === 'GREEN' ? '#006C49' : t === 'AMBER' ? '#CE943B' : '#D32F2F', 
+                              borderColor: t === 'GREEN' ? '#006C49' : t === 'AMBER' ? '#CE943B' : '#D32F2F', 
+                              color: '#ffffff', 
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.1)' 
+                            } 
+                          : {}
+                        )
+                      }}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
             </div>
           </div>
         </div>
@@ -1774,7 +1803,7 @@ function AppContent() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#006C49'
+                color: themeColors.primary
               }}
             >
               <ArrowLeft size={24} />
