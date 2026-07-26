@@ -69,7 +69,7 @@ const budgetCalculator = new DailyBudgetCalculator();
 const reinforcementPredictor = new ReinforcementPredictor();
 
 function AppContent() {
-  const { themeState, setThemeState, getThemeColors } = useRiskTheme();
+  const { themeState, setThemeState, isDarkMode, setIsDarkMode, getThemeColors } = useRiskTheme();
 
   const [activeTab, setActiveTab] = useState<'pay' | 'budget' | 'vault' | 'ledger'>('pay');
   const [isDbReady, setIsDbReady] = useState(false);
@@ -211,19 +211,35 @@ function AppContent() {
   const isBlueTheme = (activeTab !== 'pay') || (!currentUser);
 
   const rawThemeColors = getThemeColors();
-  const themeColors = isBlueTheme ? {
-    primary: '#0284c7',
-    bgGradient: 'linear-gradient(180deg, #f0f9ff 0%, #ffffff 100%)',
-    cardBg: '#ffffff',
-    borderColor: 'rgba(2, 132, 199, 0.15)',
-    glowShadow: '0 8px 30px rgba(2, 132, 199, 0.06)',
-    badgeBg: 'rgba(2, 132, 199, 0.1)',
-    textColor: '#0284c7'
-  } : rawThemeColors;
+  const themeColors = isBlueTheme ? (
+    isDarkMode ? {
+      primary: '#38bdf8',
+      bgGradient: 'linear-gradient(180deg, #0f172a 0%, #020617 100%)',
+      cardBg: '#1e293b',
+      borderColor: 'rgba(56, 189, 248, 0.2)',
+      glowShadow: '0 8px 30px rgba(56, 189, 248, 0.08)',
+      badgeBg: 'rgba(56, 189, 248, 0.15)',
+      textColor: '#38bdf8',
+      bodyText: '#f8fafc'
+    } : {
+      primary: '#0284c7',
+      bgGradient: 'linear-gradient(180deg, #f0f9ff 0%, #ffffff 100%)',
+      cardBg: '#ffffff',
+      borderColor: 'rgba(2, 132, 199, 0.15)',
+      glowShadow: '0 8px 30px rgba(2, 132, 199, 0.06)',
+      badgeBg: 'rgba(2, 132, 199, 0.1)',
+      textColor: '#0284c7',
+      bodyText: '#0f172a'
+    }
+  ) : rawThemeColors;
 
   const headerBg = isBlueTheme
-    ? '#F0F9FF'
-    : (themeState === 'GREEN' ? '#e0f2e9' : themeState === 'AMBER' ? '#EEE7E3' : '#FBEBE9');
+    ? (isDarkMode ? '#0f172a' : '#F0F9FF')
+    : (themeState === 'GREEN' 
+        ? (isDarkMode ? '#06110c' : '#e0f2e9') 
+        : themeState === 'AMBER' 
+          ? (isDarkMode ? '#130f0a' : '#EEE7E3') 
+          : (isDarkMode ? '#130909' : '#FBEBE9'));
 
   // Load Data & Run App-Launch Prediction
   const refreshAppData = async () => {
@@ -577,17 +593,38 @@ function AppContent() {
   // ONBOARDING PAGE
   if (!currentUser) {
     return (
-      <div style={{ ...styles.appShell, background: themeColors.bgGradient, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: 20 }}>
+      <div style={{ ...styles.appShell, background: themeColors.bgGradient, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: 20, color: themeColors.bodyText }}>
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <h1 style={{ ...styles.title, fontSize: 36, color: themeColors.primary }}>FundKosh</h1>
-          <p style={{ ...styles.description, fontSize: 14 }}>Dynamic Cash Management & Sahayak Friction Engine</p>
+          <p style={{ ...styles.description, fontSize: 14, color: isDarkMode ? '#94a3b8' : '#475569' }}>Dynamic Cash Management & Sahayak Friction Engine</p>
         </div>
 
         {!showCreateAccountWizard ? (
           /* PROFILE SELECTION SCREEN */
-          <div style={styles.card}>
-            <h2 style={{ ...styles.cardTitle, fontSize: 18, marginBottom: 6, textAlign: 'center' }}>Choose Your Profile</h2>
-            <p style={{ ...styles.description, textAlign: 'center', marginBottom: 20 }}>Select a user account to experience customized daily budgets and auto spare-change sweeps.</p>
+          <div style={{ ...styles.card, backgroundColor: themeColors.cardBg, borderColor: themeColors.borderColor }}>
+            {/* Theme Toggle Button on Profile Selection Page */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+              <button 
+                type="button"
+                onClick={() => setIsDarkMode(!isDarkMode)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  color: themeColors.textColor,
+                  fontWeight: 700,
+                  fontSize: 12
+                }}
+              >
+                {isDarkMode ? '🌙 Dark Mode' : '☀️ Light Mode'}
+              </button>
+            </div>
+
+            <h2 style={{ ...styles.cardTitle, fontSize: 18, marginBottom: 6, textAlign: 'center', color: themeColors.textColor }}>Choose Your Profile</h2>
+            <p style={{ ...styles.description, textAlign: 'center', marginBottom: 20, color: isDarkMode ? '#94a3b8' : '#475569' }}>Select a user account to experience customized daily budgets and auto spare-change sweeps.</p>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {entities.filter(e => e.type === 0).map(user => (
@@ -599,7 +636,8 @@ function AppContent() {
                   style={{ 
                     ...styles.entityItem, 
                     cursor: 'pointer', 
-                    border: '1px solid #e2e8f0', 
+                    border: '1px solid ' + themeColors.borderColor, 
+                    backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.03)' : '#ffffff',
                     padding: '16px', 
                     borderRadius: 12,
                     boxShadow: '0 2px 4px rgba(0,0,0,0.01)',
@@ -623,20 +661,20 @@ function AppContent() {
                     }}>
                       {user.name[0]}
                     </div>
-                    <div>
-                      <span style={{ ...styles.entityName, fontSize: 14 }}>{user.name}</span>
-                      <span style={{ ...styles.upiText, fontSize: 11, marginTop: 2 }}>{user.upi_id}</span>
+                    <div style={{ textAlign: 'left' }}>
+                      <span style={{ ...styles.entityName, fontSize: 14, color: themeColors.bodyText }}>{user.name}</span>
+                      <span style={{ ...styles.upiText, fontSize: 11, marginTop: 2, color: isDarkMode ? '#94a3b8' : '#64748b' }}>{user.upi_id}</span>
                     </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <span style={{ fontSize: 10, color: '#64748b', display: 'block' }}>Balance</span>
+                    <span style={{ fontSize: 10, color: isDarkMode ? '#94a3b8' : '#64748b', display: 'block' }}>Balance</span>
                     <span style={{ ...styles.balanceText, fontSize: 14, color: themeColors.primary }}>₹{user.balance.toLocaleString()}</span>
                   </div>
                 </div>
               ))}
             </div>
 
-            <div style={{ borderTop: '1px solid #e2e8f0', marginTop: 16, paddingTop: 16 }}>
+            <div style={{ borderTop: '1px solid ' + themeColors.borderColor, marginTop: 16, paddingTop: 16 }}>
               <button 
                 onClick={() => setShowCreateAccountWizard(true)}
                 style={{
@@ -656,7 +694,7 @@ function AppContent() {
           </div>
         ) : (
           /* CREATE USER ACCOUNT MULTI-STEP WIZARD */
-          <div style={styles.card}>
+          <div style={{ ...styles.card, backgroundColor: themeColors.cardBg, borderColor: themeColors.borderColor }}>
             
             {/* Header and Back Button */}
             {wizardStep < 5 && (
@@ -1046,10 +1084,10 @@ function AppContent() {
   const selectedReceiver = entities.find(e => e.upi_id === receiverUpi);
 
   return (
-    <div style={{ ...styles.appShell, background: headerBg }}>
+    <div style={{ ...styles.appShell, background: themeColors.bgGradient, color: themeColors.bodyText }}>
       
       {/* Mobile Top Header */}
-      <header style={{ ...styles.header, borderBottom: 'none', backgroundColor: headerBg, padding: '16px 16px 8px 16px' }}>
+      <header style={{ ...styles.header, borderBottom: 'none', backgroundColor: 'transparent', padding: '16px 16px 8px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {/* User Profile Avatar */}
           <div style={{ 
@@ -1061,19 +1099,19 @@ function AppContent() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: '#ffffff'
+            backgroundColor: themeColors.cardBg
           }}>
             <div style={{ color: themeColors.primary, fontWeight: 700, fontSize: 16 }}>
               {currentUser.name[0]}
             </div>
           </div>
           <div>
-            <h1 style={{ fontSize: 16, fontWeight: 700, color: themeColors.primary, margin: 0 }}>
+            <h1 style={{ fontSize: 16, fontWeight: 700, color: themeColors.textColor, margin: 0 }}>
               Namaste, {currentUser.name.split(' ')[0]} Ji!
             </h1>
             <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginTop: 2 }}>
-              <MapPin size={12} color="#64748b" />
-              <span style={{ fontSize: 11, color: '#64748b' }}>Mansarovar, Jaipur</span>
+              <MapPin size={12} color={isDarkMode ? '#94a3b8' : '#64748b'} />
+              <span style={{ fontSize: 11, color: isDarkMode ? '#94a3b8' : '#64748b' }}>Mansarovar, Jaipur</span>
             </div>
           </div>
         </div>
@@ -1092,6 +1130,8 @@ function AppContent() {
             {/* Primary Account Balance Card */}
             <div style={{ 
               ...styles.card, 
+              backgroundColor: themeColors.cardBg,
+              borderColor: themeColors.borderColor,
               borderLeft: '4px solid ' + themeColors.primary, 
               padding: '16px 20px',
               position: 'relative',
@@ -1225,7 +1265,7 @@ function AppContent() {
             </div>
 
             {/* Chillar Vault Card */}
-            <div style={{ ...styles.card, padding: 16, border: '1px solid ' + themeColors.borderColor, marginBottom: 4, position: 'relative', overflow: 'hidden' }}>
+            <div style={{ ...styles.card, backgroundColor: themeColors.cardBg, padding: 16, border: '1px solid ' + themeColors.borderColor, marginBottom: 4, position: 'relative', overflow: 'hidden' }}>
               <div style={{ position: 'absolute', right: 10, top: 10, opacity: 0.04, pointerEvents: 'none' }}>
                 <PiggyBank size={90} color={themeColors.primary} />
               </div>
@@ -1306,7 +1346,7 @@ function AppContent() {
           <div style={styles.tabContainer}>
             
             {/* User Profile Summary */}
-            <div style={styles.card}>
+            <div style={{ ...styles.card, backgroundColor: themeColors.cardBg, borderColor: themeColors.borderColor }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
                 <div style={{ 
                   width: 48, 
@@ -1323,12 +1363,59 @@ function AppContent() {
                   {currentUser.name[0]}
                 </div>
                 <div>
-                  <h3 style={{ ...styles.cardTitle, fontSize: 16, marginBottom: 4 }}>{currentUser.name}</h3>
+                  <h3 style={{ ...styles.cardTitle, fontSize: 16, marginBottom: 4, color: themeColors.textColor }}>{currentUser.name}</h3>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                     <span style={getTypeStyle(currentUser.type, isBlueTheme)}>{currentUser.type === 0 ? 'USER' : 'MERCHANT'}</span>
-                    <span style={{ fontSize: 11, color: '#64748b' }}>{currentUser.upi_id}</span>
+                    <span style={{ fontSize: 11, color: isDarkMode ? '#94a3b8' : '#64748b' }}>{currentUser.upi_id}</span>
                   </div>
                 </div>
+              </div>
+
+              {/* Dark Mode Toggle Switch */}
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center', 
+                margin: '12px 0 16px 0', 
+                padding: '10px 12px', 
+                border: '1px solid ' + themeColors.borderColor, 
+                borderRadius: 10, 
+                backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : '#f8fafc' 
+              }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: themeColors.textColor }}>Theme: {isDarkMode ? 'Dark Mode' : 'Light Mode'}</span>
+                <button
+                  type="button"
+                  onClick={() => setIsDarkMode(!isDarkMode)}
+                  style={{
+                    backgroundColor: isDarkMode ? themeColors.primary : '#e2e8f0',
+                    border: 'none',
+                    borderRadius: 16,
+                    width: 50,
+                    height: 26,
+                    position: 'relative',
+                    cursor: 'pointer',
+                    transition: 'background-color 0.2s',
+                    padding: 0
+                  }}
+                >
+                  <div style={{
+                    width: 20,
+                    height: 20,
+                    borderRadius: '50%',
+                    backgroundColor: '#ffffff',
+                    position: 'absolute',
+                    top: 3,
+                    left: isDarkMode ? 27 : 3,
+                    transition: 'left 0.2s',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 10,
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                  }}>
+                    {isDarkMode ? '🌙' : '☀️'}
+                  </div>
+                </button>
               </div>
 
               {/* Log Out Option */}
@@ -1352,26 +1439,26 @@ function AppContent() {
 
             {/* Dynamic Daily Budget Breakdown */}
             {budgetMetrics && (
-              <div style={styles.card}>
+              <div style={{ ...styles.card, backgroundColor: themeColors.cardBg, borderColor: themeColors.borderColor }}>
                 <div style={styles.cardHeader}>
                   <TrendingUp size={20} color={themeColors.primary} />
                   <h2 style={styles.cardTitle}>Daily Budget Engine</h2>
                 </div>
 
-                <div style={styles.budgetFormulaGrid}>
-                  <div style={styles.budgetBox}>
-                    <span style={{ fontSize: 11, color: '#475569' }}>Est. Monthly Income</span>
+                <div style={{ ...styles.budgetFormulaGrid, backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.03)' : '#f8fafc', borderColor: themeColors.borderColor }}>
+                  <div style={{ ...styles.budgetBox, backgroundColor: isDarkMode ? '#1e293b' : '#ffffff', borderColor: themeColors.borderColor }}>
+                    <span style={{ fontSize: 11, color: isDarkMode ? '#94a3b8' : '#475569' }}>Est. Monthly Income</span>
                     <span style={{ fontSize: 18, fontWeight: 700, color: themeColors.primary }}>
                       ₹{budgetMetrics.predictedMonthlyIncome.toLocaleString()}
                     </span>
                   </div>
-                  <div style={styles.budgetBox}>
-                    <span style={{ fontSize: 11, color: '#475569' }}>Fixed Bills (30d)</span>
+                  <div style={{ ...styles.budgetBox, backgroundColor: isDarkMode ? '#1e293b' : '#ffffff', borderColor: themeColors.borderColor }}>
+                    <span style={{ fontSize: 11, color: isDarkMode ? '#94a3b8' : '#475569' }}>Fixed Bills (30d)</span>
                     <span style={{ fontSize: 18, fontWeight: 700, color: themeColors.primary }}>
                       - ₹{budgetMetrics.totalActiveLiabilities.toLocaleString()}
                     </span>
                   </div>
-                  <div style={{ ...styles.budgetBox, borderColor: themeColors.borderColor }}>
+                  <div style={{ ...styles.budgetBox, backgroundColor: isDarkMode ? '#1e293b' : '#ffffff', borderColor: themeColors.borderColor }}>
                     <span style={{ fontSize: 11, color: themeColors.textColor, fontWeight: 600 }}>Daily Limit</span>
                     <span style={{ fontSize: 20, fontWeight: 800, color: themeColors.primary }}>
                       ₹{budgetMetrics.dailySpendableLimit.toLocaleString()}
@@ -1381,8 +1468,8 @@ function AppContent() {
 
                 <div style={{ marginTop: 16 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
-                    <span style={{ color: '#475569' }}>Today's Total Spend:</span>
-                    <span style={{ fontWeight: 700, color: '#0f172a' }}>
+                    <span style={{ color: isDarkMode ? '#94a3b8' : '#475569' }}>Today's Total Spend:</span>
+                    <span style={{ fontWeight: 700, color: themeColors.bodyText }}>
                       ₹{budgetMetrics.todaySpent.toLocaleString()} / ₹{budgetMetrics.dailySpendableLimit.toLocaleString()}
                     </span>
                   </div>
@@ -1401,17 +1488,17 @@ function AppContent() {
             )}
 
             {/* Active Liabilities Table */}
-            <div style={styles.card}>
+            <div style={{ ...styles.card, backgroundColor: themeColors.cardBg, borderColor: themeColors.borderColor }}>
               <div style={styles.cardHeader}>
                 <Calendar size={20} color={themeColors.primary} />
                 <h2 style={styles.cardTitle}>Upcoming Fixed Obligations</h2>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {liabilities.filter(liab => liab.entity_id === currentUser.id).map(liab => (
-                  <div key={liab.id} style={styles.liabItem}>
+                  <div key={liab.id} style={{ ...styles.liabItem, backgroundColor: isDarkMode ? 'rgba(255,255,255,0.03)' : '#ffffff', borderColor: themeColors.borderColor }}>
                     <div>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{liab.title}</span>
-                      <span style={{ fontSize: 11, color: '#475569', marginLeft: 8 }}>Due in {liab.due_in_days} days</span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: themeColors.bodyText }}>{liab.title}</span>
+                      <span style={{ fontSize: 11, color: isDarkMode ? '#94a3b8' : '#475569', marginLeft: 8 }}>Due in {liab.due_in_days} days</span>
                     </div>
                     <span style={{ fontSize: 14, fontWeight: 700, color: themeColors.primary }}>₹{liab.amount.toLocaleString()}</span>
                   </div>
@@ -1429,6 +1516,8 @@ function AppContent() {
             {/* Vault Metrics */}
             <div style={{ 
               ...styles.card, 
+              backgroundColor: themeColors.cardBg,
+              borderColor: themeColors.borderColor,
               display: 'flex', 
               flexDirection: 'column', 
               flex: 1, 
@@ -1441,7 +1530,7 @@ function AppContent() {
                 <h2 style={{ ...styles.cardTitle, fontSize: 16 }}>Automated Round-Up Vault</h2>
               </div>
               
-              <p style={{ fontSize: 12, color: '#64748b', margin: '-4px 0 20px 0', lineHeight: '1.4' }}>
+              <p style={{ fontSize: 12, color: isDarkMode ? '#94a3b8' : '#64748b', margin: '-4px 0 20px 0', lineHeight: '1.4' }}>
                 Your spare change from transactions is saved here automatically. Once the threshold is met, it auto-sweeps into your 7.2% Flexi-RD account.
               </p>
 
@@ -1505,7 +1594,7 @@ function AppContent() {
 
               {/* Auto-Sweep Threshold Selector */}
               <div style={{ marginBottom: 24 }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 8 }}>Set Auto-Sweep Threshold</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: isDarkMode ? '#94a3b8' : '#475569', display: 'block', marginBottom: 8 }}>Set Auto-Sweep Threshold</span>
                 <div style={{ display: 'flex', gap: 8 }}>
                   {[100, 150, 200, 500].map(val => (
                     <button 
@@ -1523,7 +1612,7 @@ function AppContent() {
                         justifyContent: 'center',
                         ...(vaultData?.target_threshold === val 
                           ? { backgroundColor: themeColors.primary, borderColor: themeColors.primary, color: '#ffffff' } 
-                          : { backgroundColor: '#ffffff', borderColor: '#cbd5e1', color: '#475569' }
+                          : { backgroundColor: isDarkMode ? '#1e293b' : '#ffffff', borderColor: themeColors.borderColor, color: themeColors.bodyText }
                         )
                       }}
                     >
@@ -1562,7 +1651,7 @@ function AppContent() {
           <div style={styles.tabContainer}>
             
             {/* Audit Log */}
-            <div style={styles.card}>
+            <div style={{ ...styles.card, backgroundColor: themeColors.cardBg, borderColor: themeColors.borderColor }}>
               <div style={styles.cardHeader}>
                 <Activity size={20} color={themeColors.primary} />
                 <h2 style={styles.cardTitle}>Transaction History</h2>
@@ -1572,18 +1661,18 @@ function AppContent() {
                   const filteredTxs = transactions.filter(tx => tx.sender_upi === currentUser.upi_id);
                   if (filteredTxs.length === 0) {
                     return (
-                      <div style={{ color: '#64748b', fontSize: 13, fontStyle: 'italic' }}>
+                      <div style={{ color: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 13, fontStyle: 'italic' }}>
                         No transactions recorded yet. Initiate a payment to populate ledger.
                       </div>
                     );
                   }
                   return filteredTxs.map(tx => (
-                    <div key={tx.id} style={styles.txItem}>
+                    <div key={tx.id} style={{ ...styles.txItem, backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.03)' : '#ffffff', borderColor: themeColors.borderColor }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: themeColors.bodyText }}>
                           You → {tx.receiver_upi.split('@')[0]}
                         </span>
-                        <span style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: themeColors.bodyText }}>
                           ₹{tx.amount.toLocaleString()}
                         </span>
                       </div>
@@ -1598,7 +1687,7 @@ function AppContent() {
                             Score: {tx.risk_score}
                           </span>
                         </div>
-                        <span style={{ fontSize: 11, color: '#64748b' }}>
+                        <span style={{ fontSize: 11, color: isDarkMode ? '#94a3b8' : '#64748b' }}>
                           {new Date(tx.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })},{' '}
                           {new Date(tx.timestamp).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
                         </span>
@@ -2095,7 +2184,7 @@ function AppContent() {
               </div>
             ) : isEnteringUpiPin ? (
               /* PHASE 1.5: DEDICATED UPI PIN PAGE (NPCI STANDARD LAYOUT) */
-              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, backgroundColor: '#f3f4f6', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, backgroundColor: isDarkMode ? '#0f172a' : '#f3f4f6', overflow: 'hidden', color: isDarkMode ? '#f8fafc' : '#1f2937' }}>
                 
                 {/* Top Bar */}
                 <div style={{ 
@@ -2107,14 +2196,14 @@ function AppContent() {
                 }}>
                   {/* UPI Logo in italic styled text */}
                   <span style={{ fontSize: 18, fontWeight: 900, fontStyle: 'italic', letterSpacing: '-0.5px' }}>
-                    <span style={{ color: '#4b5563' }}>U</span>
+                    <span style={{ color: isDarkMode ? '#94a3b8' : '#4b5563' }}>U</span>
                     <span style={{ color: '#059669' }}>P</span>
                     <span style={{ color: '#3b82f6' }}>I</span>
                   </span>
                   {/* Close X button */}
                   <button 
                     onClick={() => setIsEnteringUpiPin(false)}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#4b5563', padding: 4 }}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: isDarkMode ? '#cbd5e1' : '#4b5563', padding: 4 }}
                   >
                     <X size={20} />
                   </button>
@@ -2122,7 +2211,7 @@ function AppContent() {
 
                 {/* Source Bank details */}
                 <div style={{ padding: '0 20px', marginBottom: 12 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: isDarkMode ? '#94a3b8' : '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     SAVINGS · Small Finance Bank ···· 8829
                   </span>
                 </div>
@@ -2131,8 +2220,8 @@ function AppContent() {
                 <div style={{ 
                   margin: '0 20px 24px 20px', 
                   padding: '16px 20px', 
-                  backgroundColor: '#fffdf4', 
-                  border: '1px solid #fef08a', 
+                  backgroundColor: isDarkMode ? '#1e293b' : '#fffdf4', 
+                  border: isDarkMode ? '1px solid rgba(255,255,255,0.1)' : '1px solid #fef08a', 
                   borderRadius: 16, 
                   display: 'flex', 
                   justifyContent: 'space-between', 
@@ -2140,8 +2229,8 @@ function AppContent() {
                   boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
                 }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>To: {verifiedRecipient ? verifiedRecipient.name : ''}</span>
-                    <span style={{ fontSize: 24, fontWeight: 900, color: '#1f2937' }}>Pay ₹{amount.toFixed(2)}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: isDarkMode ? '#94a3b8' : '#6b7280', textTransform: 'uppercase' }}>To: {verifiedRecipient ? verifiedRecipient.name : ''}</span>
+                    <span style={{ fontSize: 24, fontWeight: 900, color: isDarkMode ? '#f8fafc' : '#1f2937' }}>Pay ₹{amount.toFixed(2)}</span>
                   </div>
                   {/* Recipient User Badge */}
                   <div style={{ 
@@ -2160,7 +2249,7 @@ function AppContent() {
 
                 {/* Centered PIN entry display */}
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '12px 24px' }}>
-                  <span style={{ fontSize: 15, fontWeight: 700, color: '#1f2937', marginBottom: 16 }}>Enter your PIN</span>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: isDarkMode ? '#f8fafc' : '#1f2937', marginBottom: 16 }}>Enter your PIN</span>
                   
                   {/* 6 Digit hollow circles */}
                   <div style={{ display: 'flex', gap: 16, marginBottom: 28 }}>
@@ -2171,8 +2260,8 @@ function AppContent() {
                           width: 14, 
                           height: 14, 
                           borderRadius: '50%', 
-                          border: hasDigit ? '2px solid #1f2937' : '2px solid #9ca3af',
-                          backgroundColor: hasDigit ? '#1f2937' : 'transparent',
+                          border: hasDigit ? (isDarkMode ? '2px solid #f8fafc' : '2px solid #1f2937') : '2px solid #9ca3af',
+                          backgroundColor: hasDigit ? (isDarkMode ? '#f8fafc' : '#1f2937') : 'transparent',
                           transition: 'all 0.1s ease-in-out'
                         }} />
                       );
@@ -2189,7 +2278,7 @@ function AppContent() {
                   marginBottom: 20, 
                   fontSize: 11, 
                   fontWeight: 600, 
-                  color: '#6b7280' 
+                  color: isDarkMode ? '#94a3b8' : '#6b7280' 
                 }}>
                   <span style={{ 
                     display: 'inline-flex', 
@@ -2207,7 +2296,7 @@ function AppContent() {
                 </div>
 
                 {/* Custom Numeric Keypad at the bottom */}
-                <div style={{ backgroundColor: '#eef2f6', padding: '20px 24px 28px 24px', width: '100%', boxSizing: 'border-box' }}>
+                <div style={{ backgroundColor: isDarkMode ? '#111827' : '#eef2f6', padding: '20px 24px 28px 24px', width: '100%', boxSizing: 'border-box' }}>
                   <div style={{ 
                     display: 'grid', 
                     gridTemplateColumns: 'repeat(3, 1fr)', 
@@ -2216,19 +2305,19 @@ function AppContent() {
                     margin: '0 auto'
                   }}>
                     {/* Row 1 */}
-                    <button type="button" onClick={() => handleKeypadPress('1')} style={styles.keypadNum}>1</button>
-                    <button type="button" onClick={() => handleKeypadPress('2')} style={styles.keypadNum}>2</button>
-                    <button type="button" onClick={() => handleKeypadPress('3')} style={styles.keypadNum}>3</button>
+                    <button type="button" onClick={() => handleKeypadPress('1')} style={{ ...styles.keypadNum, backgroundColor: isDarkMode ? '#1e293b' : '#ffffff', color: isDarkMode ? '#f8fafc' : '#1f2937' }}>1</button>
+                    <button type="button" onClick={() => handleKeypadPress('2')} style={{ ...styles.keypadNum, backgroundColor: isDarkMode ? '#1e293b' : '#ffffff', color: isDarkMode ? '#f8fafc' : '#1f2937' }}>2</button>
+                    <button type="button" onClick={() => handleKeypadPress('3')} style={{ ...styles.keypadNum, backgroundColor: isDarkMode ? '#1e293b' : '#ffffff', color: isDarkMode ? '#f8fafc' : '#1f2937' }}>3</button>
 
                     {/* Row 2 */}
-                    <button type="button" onClick={() => handleKeypadPress('4')} style={styles.keypadNum}>4</button>
-                    <button type="button" onClick={() => handleKeypadPress('5')} style={styles.keypadNum}>5</button>
-                    <button type="button" onClick={() => handleKeypadPress('6')} style={styles.keypadNum}>6</button>
+                    <button type="button" onClick={() => handleKeypadPress('4')} style={{ ...styles.keypadNum, backgroundColor: isDarkMode ? '#1e293b' : '#ffffff', color: isDarkMode ? '#f8fafc' : '#1f2937' }}>4</button>
+                    <button type="button" onClick={() => handleKeypadPress('5')} style={{ ...styles.keypadNum, backgroundColor: isDarkMode ? '#1e293b' : '#ffffff', color: isDarkMode ? '#f8fafc' : '#1f2937' }}>5</button>
+                    <button type="button" onClick={() => handleKeypadPress('6')} style={{ ...styles.keypadNum, backgroundColor: isDarkMode ? '#1e293b' : '#ffffff', color: isDarkMode ? '#f8fafc' : '#1f2937' }}>6</button>
 
                     {/* Row 3 */}
-                    <button type="button" onClick={() => handleKeypadPress('7')} style={styles.keypadNum}>7</button>
-                    <button type="button" onClick={() => handleKeypadPress('8')} style={styles.keypadNum}>8</button>
-                    <button type="button" onClick={() => handleKeypadPress('9')} style={styles.keypadNum}>9</button>
+                    <button type="button" onClick={() => handleKeypadPress('7')} style={{ ...styles.keypadNum, backgroundColor: isDarkMode ? '#1e293b' : '#ffffff', color: isDarkMode ? '#f8fafc' : '#1f2937' }}>7</button>
+                    <button type="button" onClick={() => handleKeypadPress('8')} style={{ ...styles.keypadNum, backgroundColor: isDarkMode ? '#1e293b' : '#ffffff', color: isDarkMode ? '#f8fafc' : '#1f2937' }}>8</button>
+                    <button type="button" onClick={() => handleKeypadPress('9')} style={{ ...styles.keypadNum, backgroundColor: isDarkMode ? '#1e293b' : '#ffffff', color: isDarkMode ? '#f8fafc' : '#1f2937' }}>9</button>
 
                     {/* Row 4 */}
                     <button 
@@ -2241,7 +2330,7 @@ function AppContent() {
                         display: 'flex', 
                         alignItems: 'center', 
                         justifyContent: 'center',
-                        color: '#1f2937'
+                        color: isDarkMode ? '#f8fafc' : '#1f2937'
                       }}
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -2250,7 +2339,7 @@ function AppContent() {
                         <line x1="12" y1="9" x2="18" y2="15"></line>
                       </svg>
                     </button>
-                    <button type="button" onClick={() => handleKeypadPress('0')} style={styles.keypadNum}>0</button>
+                    <button type="button" onClick={() => handleKeypadPress('0')} style={{ ...styles.keypadNum, backgroundColor: isDarkMode ? '#1e293b' : '#ffffff', color: isDarkMode ? '#f8fafc' : '#1f2937' }}>0</button>
                     <button 
                       type="button" 
                       onClick={() => handleKeypadPress('confirm')}
@@ -2698,31 +2787,47 @@ function AppContent() {
       )}
 
       {/* Mobile Bottom Navigation Bar */}
-      <nav style={{ ...styles.bottomNav, borderTop: `1px solid ${themeColors.borderColor}` }}>
+      <nav style={{ 
+        ...styles.bottomNav, 
+        backgroundColor: isDarkMode ? themeColors.cardBg : 'rgba(255, 255, 255, 0.95)',
+        borderTop: `1px solid ${themeColors.borderColor}` 
+      }}>
         <button 
           onClick={() => setActiveTab('pay')}
-          style={activeTab === 'pay' ? { ...styles.navTab, color: themeColors.primary } : styles.navTab}
+          style={activeTab === 'pay' 
+            ? { ...styles.navTab, color: themeColors.textColor } 
+            : { ...styles.navTab, color: isDarkMode ? '#94a3b8' : '#64748b' }
+          }
         >
           <Home size={20} />
           <span>Home</span>
         </button>
         <button 
           onClick={() => setActiveTab('ledger')}
-          style={activeTab === 'ledger' ? { ...styles.navTab, color: themeColors.primary } : styles.navTab}
+          style={activeTab === 'ledger' 
+            ? { ...styles.navTab, color: themeColors.textColor } 
+            : { ...styles.navTab, color: isDarkMode ? '#94a3b8' : '#64748b' }
+          }
         >
           <FileText size={20} />
           <span>Transactions</span>
         </button>
         <button 
           onClick={() => setActiveTab('vault')}
-          style={activeTab === 'vault' ? { ...styles.navTab, color: themeColors.primary } : styles.navTab}
+          style={activeTab === 'vault' 
+            ? { ...styles.navTab, color: themeColors.textColor } 
+            : { ...styles.navTab, color: isDarkMode ? '#94a3b8' : '#64748b' }
+          }
         >
           <PiggyBank size={20} />
           <span>Vault</span>
         </button>
         <button 
           onClick={() => setActiveTab('budget')}
-          style={activeTab === 'budget' ? { ...styles.navTab, color: themeColors.primary } : styles.navTab}
+          style={activeTab === 'budget' 
+            ? { ...styles.navTab, color: themeColors.textColor } 
+            : { ...styles.navTab, color: isDarkMode ? '#94a3b8' : '#64748b' }
+          }
         >
           <User size={20} />
           <span>Profile</span>
@@ -2785,7 +2890,7 @@ function getRiskColor(score: number, isBlueTheme?: boolean): string {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  appShell: { width: '100%', minHeight: '100vh', display: 'flex', flexDirection: 'column', boxSizing: 'border-box', fontFamily: 'Inter, sans-serif', color: '#0f172a', paddingBottom: 80 },
+  appShell: { width: '100%', minHeight: '100vh', display: 'flex', flexDirection: 'column', boxSizing: 'border-box', fontFamily: 'Inter, sans-serif', paddingBottom: 80 },
   centerContainer: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '80vh' },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 16px 12px 16px', backgroundColor: 'rgba(240, 253, 244, 0.85)', backdropFilter: 'blur(8px)' },
   title: { fontSize: 22, fontWeight: 800, margin: 0, color: '#006C49' },
@@ -2794,9 +2899,9 @@ const styles: Record<string, React.CSSProperties> = {
   statusChip: { display: 'flex', alignItems: 'center', gap: 6, backgroundColor: '#ffffff', padding: '4px 10px', borderRadius: 16, fontSize: 11, color: '#475569', border: '1px solid #e2e8f0' },
   mainContent: { flex: 1, padding: '16px 16px 80px 16px' },
   tabContainer: { display: 'flex', flexDirection: 'column', gap: 16 },
-  card: { backgroundColor: '#ffffff', borderRadius: 16, padding: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.03)' },
+  card: { borderRadius: 16, padding: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.03)' },
   cardHeader: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 },
-  cardTitle: { fontSize: 15, fontWeight: 700, color: '#0f172a', margin: 0 },
+  cardTitle: { fontSize: 15, fontWeight: 700, color: 'inherit', margin: 0 },
   form: { display: 'flex', flexDirection: 'column', gap: 12 },
   formGroup: { display: 'flex', flexDirection: 'column', gap: 4 },
   formRow: { display: 'flex', gap: 10 },
@@ -2814,7 +2919,7 @@ const styles: Record<string, React.CSSProperties> = {
   liabItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#ffffff', padding: '8px 12px', borderRadius: 8, border: '1px solid #e2e8f0' },
   entityList: { display: 'flex', flexDirection: 'column', gap: 8 },
   entityItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: '#ffffff', borderRadius: 8, border: '1px solid #e2e8f0' },
-  entityName: { fontWeight: 600, fontSize: 13, color: '#0f172a' },
+  entityName: { fontWeight: 600, fontSize: 13, color: 'inherit' },
   upiText: { fontSize: 11, color: '#64748b', display: 'block', marginTop: 2 },
   balanceText: { fontWeight: 700, fontSize: 13, color: '#006C49' },
   txList: { display: 'flex', flexDirection: 'column', gap: 8 },
