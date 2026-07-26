@@ -1223,7 +1223,7 @@ function AppContent() {
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-                <span style={{ fontSize: 20, fontWeight: 800, color: '#0f172a' }}>
+                <span style={{ fontSize: 20, fontWeight: 800, color: themeColors.textColor }}>
                   {showBalance ? `₹${currentUser.balance.toLocaleString()}` : '■■■■■■'}
                 </span>
                 <button 
