@@ -241,6 +241,71 @@ function AppContent() {
           ? (isDarkMode ? '#130f0a' : '#EEE7E3') 
           : (isDarkMode ? '#130909' : '#FBEBE9'));
 
+  const styles: Record<string, React.CSSProperties> = {
+    appShell: { width: '100%', minHeight: '100vh', display: 'flex', flexDirection: 'column', boxSizing: 'border-box', fontFamily: 'Inter, sans-serif', color: themeColors.bodyText, paddingBottom: 80 },
+    centerContainer: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '80vh' },
+    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 16px 12px 16px', backgroundColor: 'transparent' },
+    title: { fontSize: 22, fontWeight: 800, margin: 0, color: themeColors.primary },
+    themeStateChip: { fontSize: 10, fontWeight: 800, padding: '3px 8px', borderRadius: 12 },
+    description: { fontSize: 12, color: isDarkMode ? '#cbd5e1' : '#475569', margin: '2px 0 0 0' },
+    statusChip: { display: 'flex', alignItems: 'center', gap: 6, backgroundColor: themeColors.cardBg, padding: '4px 10px', borderRadius: 16, fontSize: 11, color: isDarkMode ? '#cbd5e1' : '#475569', border: '1px solid ' + themeColors.borderColor },
+    mainContent: { flex: 1, padding: '16px 16px 80px 16px' },
+    tabContainer: { display: 'flex', flexDirection: 'column', gap: 16 },
+    card: { backgroundColor: themeColors.cardBg, borderRadius: 16, padding: 16, border: '1px solid ' + themeColors.borderColor, boxShadow: themeColors.glowShadow },
+    cardHeader: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 },
+    cardTitle: { fontSize: 15, fontWeight: 700, color: themeColors.textColor, margin: 0 },
+    form: { display: 'flex', flexDirection: 'column', gap: 12 },
+    formGroup: { display: 'flex', flexDirection: 'column', gap: 4 },
+    formRow: { display: 'flex', gap: 10 },
+    label: { fontSize: 12, fontWeight: 600, color: isDarkMode ? '#cbd5e1' : '#475569' },
+    input: { backgroundColor: themeColors.cardBg, border: '1px solid ' + themeColors.borderColor, borderRadius: 8, padding: '10px', color: themeColors.bodyText, fontSize: 14, outline: 'none' },
+    previewBox: { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.03)' : '#f8fafc', padding: 12, borderRadius: 10, border: '1px dashed ' + themeColors.borderColor },
+    progressBarBg: { height: 6, width: '100%', backgroundColor: isDarkMode ? '#334155' : '#e2e8f0', borderRadius: 3, overflow: 'hidden' },
+    progressBarFill: { height: '100%', transition: 'width 0.3s ease, background-color 0.3s ease' },
+    submitBtn: { color: '#ffffff', border: 'none', borderRadius: 10, padding: '12px', fontWeight: 700, fontSize: 14, cursor: 'pointer', marginTop: 4 },
+    notification: { backgroundColor: themeColors.badgeBg, color: themeColors.textColor, border: '1px solid ' + themeColors.borderColor, padding: 10, borderRadius: 8, fontSize: 12, marginBottom: 12 },
+    vectorBtn: { backgroundColor: themeColors.cardBg, border: '1px solid ' + themeColors.borderColor, color: isDarkMode ? '#cbd5e1' : '#475569', borderRadius: 6, padding: '6px 10px', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 },
+    activeVectorBtn: { backgroundColor: themeColors.primary, border: '1px solid ' + themeColors.primary, color: '#ffffff', borderRadius: 6, padding: '6px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 },
+    budgetFormulaGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: 8, backgroundColor: isDarkMode ? 'rgba(255,255,255,0.03)' : '#f8fafc', padding: 10, borderRadius: 10, border: '1px solid ' + themeColors.borderColor },
+    budgetBox: { display: 'flex', flexDirection: 'column', gap: 2, padding: 8, backgroundColor: themeColors.cardBg, borderRadius: 8, border: '1px solid ' + themeColors.borderColor },
+    liabItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: themeColors.cardBg, padding: '8px 12px', borderRadius: 8, border: '1px solid ' + themeColors.borderColor },
+    entityList: { display: 'flex', flexDirection: 'column', gap: 8 },
+    entityItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: themeColors.cardBg, borderRadius: 8, border: '1px solid ' + themeColors.borderColor },
+    entityName: { fontWeight: 600, fontSize: 13, color: themeColors.bodyText },
+    upiText: { fontSize: 11, color: isDarkMode ? '#94a3b8' : '#64748b', display: 'block', marginTop: 2 },
+    balanceText: { fontWeight: 700, fontSize: 13, color: themeColors.textColor },
+    txList: { display: 'flex', flexDirection: 'column', gap: 8 },
+    txItem: { backgroundColor: themeColors.cardBg, padding: 10, borderRadius: 8, border: '1px solid ' + themeColors.borderColor },
+    seedBtn: { backgroundColor: themeColors.cardBg, border: '1px solid ' + themeColors.borderColor, color: themeColors.textColor, borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 },
+    modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.4)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 },
+    modalContent: { backgroundColor: themeColors.cardBg, borderRadius: 16, padding: 20, maxWidth: 400, width: '100%', border: '1px solid ' + themeColors.borderColor, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.08)' },
+    modalIconBg: { width: 56, height: 56, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' },
+    modalSummary: { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.03)' : '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid ' + themeColors.borderColor, marginBottom: 12 },
+    reasonsBox: { backgroundColor: '#fee2e2', border: '1px solid #fecaca', color: '#991b1b', padding: 10, borderRadius: 8, marginBottom: 12 },
+    cooldownNotice: { display: 'flex', alignItems: 'center', gap: 6, backgroundColor: '#fef3c7', color: '#d97706', padding: 8, borderRadius: 8, fontSize: 12, marginBottom: 12 },
+    cooldownDoneNotice: { display: 'flex', alignItems: 'center', gap: 6, backgroundColor: '#f0fdf4', color: '#16a34a', padding: 8, borderRadius: 8, fontSize: 12, marginBottom: 12 },
+    modalActions: { display: 'flex', gap: 10 },
+    cancelBtn: { flex: 1, backgroundColor: '#10b981', color: '#ffffff', border: 'none', padding: '10px', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 },
+    confirmBtn: { flex: 1, backgroundColor: '#ef4444', color: '#ffffff', border: 'none', padding: '10px', borderRadius: 8, fontWeight: 700, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 },
+    bottomNav: { position: 'fixed', bottom: 0, left: 0, right: 0, height: 60, backgroundColor: isDarkMode ? themeColors.cardBg : 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(10px)', display: 'flex', justifyContent: 'space-around', alignItems: 'center', zIndex: 90, borderTop: '1px solid ' + themeColors.borderColor, boxShadow: '0 -4px 12px rgba(0, 0, 0, 0.03)' },
+    navTab: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, background: 'none', border: 'none', color: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 11, cursor: 'pointer' },
+    keypadNum: {
+      backgroundColor: isDarkMode ? '#1e293b' : '#ffffff',
+      color: themeColors.bodyText,
+      borderRadius: 24,
+      border: 'none',
+      fontSize: 22,
+      fontWeight: '700',
+      height: 48,
+      cursor: 'pointer',
+      boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      transition: 'background-color 0.1s'
+    }
+  };
+
   // Load Data & Run App-Launch Prediction
   const refreshAppData = async () => {
     const health = await apiClient.checkHealth();
@@ -1365,7 +1430,7 @@ function AppContent() {
                 <div>
                   <h3 style={{ ...styles.cardTitle, fontSize: 16, marginBottom: 4, color: themeColors.textColor }}>{currentUser.name}</h3>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    <span style={getTypeStyle(currentUser.type, isBlueTheme)}>{currentUser.type === 0 ? 'USER' : 'MERCHANT'}</span>
+                    <span style={getTypeStyle(currentUser.type, isBlueTheme, isDarkMode)}>{currentUser.type === 0 ? 'USER' : 'MERCHANT'}</span>
                     <span style={{ fontSize: 11, color: isDarkMode ? '#94a3b8' : '#64748b' }}>{currentUser.upi_id}</span>
                   </div>
                 </div>
@@ -1679,11 +1744,11 @@ function AppContent() {
                       
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={getStatusBadgeStyle(tx.status, isBlueTheme)}>{tx.status}</span>
-                          <span style={getPredictedCategoryBadge(tx.note === 'other' ? 'transfers' : (tx.note || 'essential'), isBlueTheme)}>
+                          <span style={getStatusBadgeStyle(tx.status, isBlueTheme, isDarkMode)}>{tx.status}</span>
+                          <span style={getPredictedCategoryBadge(tx.note === 'other' ? 'transfers' : (tx.note || 'essential'), isBlueTheme, isDarkMode)}>
                             {tx.note === 'other' ? 'transfers' : (tx.note || 'essential')}
                           </span>
-                          <span style={{ fontSize: 10, fontWeight: 700, color: getRiskColor(tx.risk_score, isBlueTheme) }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: getRiskColor(tx.risk_score, isBlueTheme, isDarkMode) }}>
                             Score: {tx.risk_score}
                           </span>
                         </div>
@@ -2847,7 +2912,15 @@ export default function App() {
 }
 
 // Helper Badge Styles
-function getTypeStyle(type: number, isBlueTheme?: boolean): React.CSSProperties {
+function getTypeStyle(type: number, isBlueTheme?: boolean, isDark?: boolean): React.CSSProperties {
+  if (isDark) {
+    if (isBlueTheme) return { backgroundColor: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700 };
+    switch (type) {
+      case 0: return { backgroundColor: 'rgba(37, 99, 235, 0.15)', color: '#60a5fa', padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700 };
+      case 1: return { backgroundColor: 'rgba(124, 58, 237, 0.15)', color: '#c084fc', padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700 };
+      default: return { backgroundColor: 'rgba(255,255,255,0.08)', color: '#94a3b8', padding: '2px 6px', borderRadius: 4, fontSize: 10 };
+    }
+  }
   if (isBlueTheme) {
     return { backgroundColor: '#e0f2fe', color: '#0369a1', padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700 };
   }
@@ -2858,7 +2931,16 @@ function getTypeStyle(type: number, isBlueTheme?: boolean): React.CSSProperties 
   }
 }
 
-function getPredictedCategoryBadge(category: string, isBlueTheme?: boolean): React.CSSProperties {
+function getPredictedCategoryBadge(category: string, isBlueTheme?: boolean, isDark?: boolean): React.CSSProperties {
+  if (isDark) {
+    if (isBlueTheme) return { backgroundColor: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700 };
+    switch (category) {
+      case 'essential': return { backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#34d399', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700 };
+      case 'impulsive': return { backgroundColor: 'rgba(239, 68, 68, 0.15)', color: '#f87171', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700 };
+      case 'transfers': return { backgroundColor: 'rgba(37, 99, 235, 0.15)', color: '#60a5fa', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700 };
+      default: return { backgroundColor: 'rgba(255,255,255,0.08)', color: '#94a3b8', padding: '2px 8px', borderRadius: 4, fontSize: 11 };
+    }
+  }
   if (isBlueTheme) {
     return { backgroundColor: '#e0f2fe', color: '#0369a1', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700 };
   }
@@ -2870,7 +2952,16 @@ function getPredictedCategoryBadge(category: string, isBlueTheme?: boolean): Rea
   }
 }
 
-function getStatusBadgeStyle(status: string, isBlueTheme?: boolean): React.CSSProperties {
+function getStatusBadgeStyle(status: string, isBlueTheme?: boolean, isDark?: boolean): React.CSSProperties {
+  if (isDark) {
+    if (isBlueTheme) return { backgroundColor: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.3)', padding: '2px 6px', borderRadius: 12, fontSize: 10, fontWeight: 700 };
+    switch (status) {
+      case 'COMPLETED': return { backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '2px 6px', borderRadius: 12, fontSize: 10, fontWeight: 700 };
+      case 'SPEED_BUMP_REQUIRED': return { backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.3)', padding: '2px 6px', borderRadius: 12, fontSize: 10, fontWeight: 700 };
+      case 'BLOCKED': return { backgroundColor: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '2px 6px', borderRadius: 12, fontSize: 10, fontWeight: 700 };
+      default: return { backgroundColor: 'rgba(255,255,255,0.08)', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: 12, fontSize: 10, fontWeight: 700 };
+    }
+  }
   if (isBlueTheme) {
     return { backgroundColor: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', padding: '2px 6px', borderRadius: 12, fontSize: 10, fontWeight: 700 };
   }
@@ -2882,74 +2973,17 @@ function getStatusBadgeStyle(status: string, isBlueTheme?: boolean): React.CSSPr
   }
 }
 
-function getRiskColor(score: number, isBlueTheme?: boolean): string {
+function getRiskColor(score: number, isBlueTheme?: boolean, isDark?: boolean): string {
+  if (isDark) {
+    if (isBlueTheme) return '#38bdf8';
+    if (score >= 60) return '#f87171';
+    if (score >= 35) return '#fbbf24';
+    return '#34d399';
+  }
   if (isBlueTheme) return '#0284c7';
   if (score >= 60) return '#dc2626';
   if (score >= 35) return '#d97706';
   return '#16a34a';
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  appShell: { width: '100%', minHeight: '100vh', display: 'flex', flexDirection: 'column', boxSizing: 'border-box', fontFamily: 'Inter, sans-serif', paddingBottom: 80 },
-  centerContainer: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '80vh' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 16px 12px 16px', backgroundColor: 'rgba(240, 253, 244, 0.85)', backdropFilter: 'blur(8px)' },
-  title: { fontSize: 22, fontWeight: 800, margin: 0, color: '#006C49' },
-  themeStateChip: { fontSize: 10, fontWeight: 800, padding: '3px 8px', borderRadius: 12 },
-  description: { fontSize: 12, color: '#475569', margin: '2px 0 0 0' },
-  statusChip: { display: 'flex', alignItems: 'center', gap: 6, backgroundColor: '#ffffff', padding: '4px 10px', borderRadius: 16, fontSize: 11, color: '#475569', border: '1px solid #e2e8f0' },
-  mainContent: { flex: 1, padding: '16px 16px 80px 16px' },
-  tabContainer: { display: 'flex', flexDirection: 'column', gap: 16 },
-  card: { borderRadius: 16, padding: 16, border: '1px solid #e2e8f0', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.03)' },
-  cardHeader: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 },
-  cardTitle: { fontSize: 15, fontWeight: 700, color: 'inherit', margin: 0 },
-  form: { display: 'flex', flexDirection: 'column', gap: 12 },
-  formGroup: { display: 'flex', flexDirection: 'column', gap: 4 },
-  formRow: { display: 'flex', gap: 10 },
-  label: { fontSize: 12, fontWeight: 600, color: '#475569' },
-  input: { backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: 8, padding: '10px', color: '#0f172a', fontSize: 14, outline: 'none' },
-  previewBox: { backgroundColor: '#f8fafc', padding: 12, borderRadius: 10, border: '1px dashed #cbd5e1' },
-  progressBarBg: { height: 6, width: '100%', backgroundColor: '#e2e8f0', borderRadius: 3, overflow: 'hidden' },
-  progressBarFill: { height: '100%', transition: 'width 0.3s ease, background-color 0.3s ease' },
-  submitBtn: { color: '#ffffff', border: 'none', borderRadius: 10, padding: '12px', fontWeight: 700, fontSize: 14, cursor: 'pointer', marginTop: 4 },
-  notification: { backgroundColor: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd', padding: 10, borderRadius: 8, fontSize: 12, marginBottom: 12 },
-  vectorBtn: { backgroundColor: '#ffffff', border: '1px solid #cbd5e1', color: '#475569', borderRadius: 6, padding: '6px 10px', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 },
-  activeVectorBtn: { backgroundColor: '#006C49', border: '1px solid #006C49', color: '#ffffff', borderRadius: 6, padding: '6px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 },
-  budgetFormulaGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: 8, backgroundColor: '#f8fafc', padding: 10, borderRadius: 10, border: '1px solid #e2e8f0' },
-  budgetBox: { display: 'flex', flexDirection: 'column', gap: 2, padding: 8, backgroundColor: '#ffffff', borderRadius: 8, border: '1px solid #e2e8f0' },
-  liabItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#ffffff', padding: '8px 12px', borderRadius: 8, border: '1px solid #e2e8f0' },
-  entityList: { display: 'flex', flexDirection: 'column', gap: 8 },
-  entityItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', backgroundColor: '#ffffff', borderRadius: 8, border: '1px solid #e2e8f0' },
-  entityName: { fontWeight: 600, fontSize: 13, color: 'inherit' },
-  upiText: { fontSize: 11, color: '#64748b', display: 'block', marginTop: 2 },
-  balanceText: { fontWeight: 700, fontSize: 13, color: '#006C49' },
-  txList: { display: 'flex', flexDirection: 'column', gap: 8 },
-  txItem: { backgroundColor: '#ffffff', padding: 10, borderRadius: 8, border: '1px solid #e2e8f0' },
-  seedBtn: { backgroundColor: '#ffffff', border: '1px solid #cbd5e1', color: '#006C49', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 },
-  modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.4)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 },
-  modalContent: { backgroundColor: '#ffffff', borderRadius: 16, padding: 20, maxWidth: 400, width: '100%', border: '1px solid #e2e8f0', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.08)' },
-  modalIconBg: { width: 56, height: 56, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' },
-  modalSummary: { backgroundColor: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0', marginBottom: 12 },
-  reasonsBox: { backgroundColor: '#fee2e2', border: '1px solid #fecaca', color: '#991b1b', padding: 10, borderRadius: 8, marginBottom: 12 },
-  cooldownNotice: { display: 'flex', alignItems: 'center', gap: 6, backgroundColor: '#fef3c7', color: '#d97706', padding: 8, borderRadius: 8, fontSize: 12, marginBottom: 12 },
-  cooldownDoneNotice: { display: 'flex', alignItems: 'center', gap: 6, backgroundColor: '#f0fdf4', color: '#16a34a', padding: 8, borderRadius: 8, fontSize: 12, marginBottom: 12 },
-  modalActions: { display: 'flex', gap: 10 },
-  cancelBtn: { flex: 1, backgroundColor: '#10b981', color: '#ffffff', border: 'none', padding: '10px', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 },
-  confirmBtn: { flex: 1, backgroundColor: '#ef4444', color: '#ffffff', border: 'none', padding: '10px', borderRadius: 8, fontWeight: 700, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 },
-  bottomNav: { position: 'fixed', bottom: 0, left: 0, right: 0, height: 60, backgroundColor: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(10px)', display: 'flex', justifyContent: 'space-around', alignItems: 'center', zIndex: 90, borderTop: '1px solid #e2e8f0', boxShadow: '0 -4px 12px rgba(0, 0, 0, 0.03)' },
-  navTab: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, background: 'none', border: 'none', color: '#64748b', fontSize: 11, cursor: 'pointer' },
-  keypadNum: {
-    backgroundColor: '#ffffff',
-    color: '#1f2937',
-    borderRadius: 24,
-    border: 'none',
-    fontSize: 22,
-    fontWeight: '700',
-    height: 48,
-    cursor: 'pointer',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    transition: 'background-color 0.1s'
-  }
-};
+// styles object is now dynamically declared inside the AppContent component for context themes support.
