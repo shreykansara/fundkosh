@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { 
   RiskThemeProvider, 
   useRiskTheme 
@@ -57,10 +57,20 @@ import {
   ArrowLeft,
   Check,
   Award,
-  X
+  X,
+  Mic,
+  Volume2,
+  MicOff,
+  MessageSquare,
+  Play,
+  VolumeX,
+  Trash2,
+  Settings,
+  Globe
 } from 'lucide-react';
 
 import { ReinforcementPredictor, getCurrentContext, PredictionResult } from './engine/ReinforcementModel';
+import { bhashiniClient, BhashiniConfig } from './api/bhashiniClient';
 
 const paymentController = new PaymentController();
 const speedBumpEvaluator = new SpeedBumpEvaluator();
@@ -71,7 +81,7 @@ const reinforcementPredictor = new ReinforcementPredictor();
 function AppContent() {
   const { themeState, setThemeState, isDarkMode, setIsDarkMode, getThemeColors } = useRiskTheme();
 
-  const [activeTab, setActiveTab] = useState<'pay' | 'budget' | 'vault' | 'ledger'>('pay');
+  const [activeTab, setActiveTab] = useState<'pay' | 'budget' | 'vault' | 'ledger' | 'voice'>('pay');
   const [isDbReady, setIsDbReady] = useState(false);
   const [mongoConnected, setMongoConnected] = useState(false);
 
@@ -79,6 +89,341 @@ function AppContent() {
   const [currentUser, setCurrentUser] = useState<Entity | null>(null);
   const [showSandbox, setShowSandbox] = useState(false);
   const [showBalance, setShowBalance] = useState(false);
+
+  // Voice Assistant States
+  const [voiceLang, setVoiceLang] = useState<'HI' | 'MR' | 'EN'>('HI');
+  const [voiceHistory, setVoiceHistory] = useState<{ id: string; user: string; assistant: string; timestamp: number }[]>([]);
+
+  const [bhashiniConfig, setBhashiniConfig] = useState<BhashiniConfig | null>(null);
+
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isThinking, setIsThinking] = useState(false);
+  const [transcriptInput, setTranscriptInput] = useState('');
+  const [assistantResponse, setAssistantResponse] = useState('');
+  const [userQueryText, setUserQueryText] = useState('');
+  const [showVoiceSimulator, setShowVoiceSimulator] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
+  // Load conversation history unique to the selected user profile
+  useEffect(() => {
+    if (currentUser) {
+      try {
+        const saved = localStorage.getItem(`fundkosh_voice_history_${currentUser.id}`);
+        setVoiceHistory(saved ? JSON.parse(saved) : []);
+      } catch {
+        setVoiceHistory([]);
+      }
+    } else {
+      setVoiceHistory([]);
+    }
+  }, [currentUser]);
+
+  // Save conversation history unique to the selected user profile
+  useEffect(() => {
+    if (currentUser) {
+      if (voiceHistory.length > 0) {
+        localStorage.setItem(`fundkosh_voice_history_${currentUser.id}`, JSON.stringify(voiceHistory));
+      } else {
+        localStorage.removeItem(`fundkosh_voice_history_${currentUser.id}`);
+      }
+    }
+  }, [voiceHistory, currentUser]);
+
+  const loadBhashiniConfig = async () => {
+    try {
+      const config = await bhashiniClient.getPipelineConfig();
+      setBhashiniConfig(config);
+    } catch (err) {
+      console.warn('Failed to load Bhashini pipeline configuration (using offline simulator fallback):', err);
+      setBhashiniConfig(null);
+    }
+  };
+
+  useEffect(() => {
+    loadBhashiniConfig();
+  }, []);
+
+  const speakText = (text: string, langCode: 'HI' | 'MR' | 'EN') => {
+    if (bhashiniConfig) {
+      setIsSpeaking(true);
+      const bhashiniLang = langCode === 'HI' ? 'hi' : langCode === 'MR' ? 'raj' : 'en';
+      bhashiniClient.textToSpeech(text, bhashiniLang, bhashiniConfig)
+        .then(base64Audio => {
+          const audio = new Audio("data:audio/wav;base64," + base64Audio);
+          audio.onended = () => setIsSpeaking(false);
+          audio.onerror = () => setIsSpeaking(false);
+          audio.play();
+        })
+        .catch(err => {
+          console.error("Bhashini TTS error:", err);
+          setIsSpeaking(false);
+        });
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        
+        // Convert blob to base64
+        const reader = new FileReader();
+        reader.readAsDataURL(audioBlob);
+        reader.onloadend = async () => {
+          const base64data = (reader.result as string).split(',')[1];
+          setIsThinking(true);
+          try {
+            const bhashiniLang = voiceLang === 'HI' ? 'hi' : voiceLang === 'MR' ? 'raj' : 'en';
+            if (bhashiniConfig) {
+              const transcribedText = await bhashiniClient.speechToText(base64data, bhashiniLang, bhashiniConfig);
+              handleUserQuery(transcribedText);
+            } else {
+              throw new Error("Bhashini not configured");
+            }
+          } catch (err: any) {
+            console.error("ASR failed:", err);
+            setAssistantResponse("Failed to transcribe audio. Please make sure your Bhashini API keys in .env are valid.");
+            setIsThinking(false);
+          }
+        };
+
+        // Stop all audio tracks
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsListening(true);
+      setUserQueryText('');
+    } catch (err) {
+      console.error("Failed to access microphone:", err);
+      // Fallback to simulator if mic access is blocked or rejected
+      setShowVoiceSimulator(true);
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    setIsListening(false);
+  };
+
+  const startListening = () => {
+    if (isListening) {
+      stopRecording();
+      return;
+    }
+    setIsSpeaking(false);
+
+    if (bhashiniConfig) {
+      startRecording();
+    } else {
+      setShowVoiceSimulator(true);
+    }
+  };
+
+  const generateVoiceResponse = (query: string, lang: 'HI' | 'MR' | 'EN'): { text: string; category: string } => {
+    const q = query.toLowerCase();
+    
+    // 1. Check Compliance / Advice Intent
+    const isAdvice = q.includes('advice') || q.includes('invest') || q.includes('stocks') || q.includes('tip') || 
+                     q.includes('recommend') || q.includes('सलाह') || q.includes('निवेश') || q.includes('शेयर') ||
+                     q.includes('म्यूचुअल') || q.includes('म्युचुअल') || q.includes('फंड');
+                     
+    if (isAdvice) {
+      if (lang === 'EN') {
+        return {
+          text: "Under SEBI Investment Adviser Regulations, I am a financial information assistant and cannot provide personalized advice or recommendations. I can only display your balance, vault, budgets, and EMIs.",
+          category: 'compliance'
+        };
+      } else if (lang === 'MR') {
+        return {
+          text: "सेबी (SEBI) नियमां रे मुजब, मैं एक वित्तीय सूचना सहायक हूँ और खुद री कोई निवेश सलाह नी दे सकूँ। पण, मैं थारो बैलेंस, गुल्लक, बजट और ईएमआई दिखा सकूँ।",
+          category: 'compliance'
+        };
+      } else {
+        return {
+          text: "सेबी (SEBI) निवेश सलाहकार नियमों के तहत, मैं एक वित्तीय सूचना सहायक हूं और व्यक्तिगत निवेश सलाह या सिफारिशें नहीं दे सकता। मैं केवल आपका बैलेंस, गुल्लक, बजट और ईएमआई दिखा सकता हूं।",
+          category: 'compliance'
+        };
+      }
+    }
+
+    // 2. Check Balance Intent
+    const isBalance = q.includes('balance') || q.includes('money') || q.includes('amount') || q.includes('खाता') || 
+                      q.includes('बैलेंस') || q.includes('पैसा') || q.includes('कितना') || q.includes('पिया') || 
+                      q.includes('कितरा');
+    if (isBalance) {
+      const bal = currentUser?.balance || 0;
+      if (lang === 'EN') {
+        return {
+          text: `Your current Small Finance Bank account balance is Rupees ${bal.toLocaleString()}.`,
+          category: 'balance'
+        };
+      } else if (lang === 'MR') {
+        return {
+          text: `थारो अभी रो खातो बैलेंस ₹${bal.toLocaleString()} है।`,
+          category: 'balance'
+        };
+      } else {
+        return {
+          text: `आपका वर्तमान खाता बैलेंस ₹${bal.toLocaleString()} है।`,
+          category: 'balance'
+        };
+      }
+    }
+
+    // 3. Check Vault Intent
+    const isVault = q.includes('vault') || q.includes('savings') || q.includes('save') || q.includes('gulak') || 
+                    q.includes('gullak') || q.includes('गुल्लक') || q.includes('बचत') || q.includes('ब्याज');
+    if (isVault) {
+      const vaultBal = vaultData?.balance || 0;
+      const flexiBal = vaultData?.flexi_rd_balance || 0;
+      const target = vaultData?.target_threshold || 100;
+      const rate = vaultData?.interest_rate || 7.2;
+      
+      if (lang === 'EN') {
+        return {
+          text: `You have saved Rupees ${vaultBal} in your vault container. Your sweep target is Rupees ${target}. You also have Rupees ${flexiBal} in your Flexi RD account earning ${rate}% interest.`,
+          category: 'vault'
+        };
+      } else if (lang === 'MR') {
+        return {
+          text: `थांरी गुल्लक में ₹${vaultBal} बच गया है। थारो स्वीप टारगेट ₹${target} है। थारे कनै फ्लेक्सी आरडी (Flexi RD) में भी ₹${flexiBal} है, जपे ${rate}% ब्याज मिल रह्यो है।`,
+          category: 'vault'
+        };
+      } else {
+        return {
+          text: `आपने अपने गुल्लक में ₹${vaultBal} बचाए हैं। आपका ऑटो-स्वीप लक्ष्य ₹${target} है। आपके पास फ्लेक्सी आरडी (Flexi RD) में ₹${flexiBal} हैं, जिस पर ${rate}% ब्याज मिल रहा है।`,
+          category: 'vault'
+        };
+      }
+    }
+
+    // 4. Check EMI / Liabilities Intent
+    const isEMI = q.includes('emi') || q.includes('loan') || q.includes('due') || q.includes('liability') || 
+                  q.includes('rent') || q.includes('bill') || q.includes('किस्त') || q.includes('किश्त') || 
+                  q.includes('ऋण') || q.includes('देय') || q.includes('दायित्व');
+    if (isEMI) {
+      const activeLiabs = currentUser?.liabilities?.filter(l => l.is_active) || [];
+      if (activeLiabs.length === 0) {
+        if (lang === 'EN') return { text: "You do not have any active EMIs or upcoming liabilities.", category: 'emi' };
+        if (lang === 'MR') return { text: "थारे कनै कोई एक्टिव ईएमआई या लोन कोनी है।", category: 'emi' };
+        return { text: "आपके पास कोई सक्रिय ईएमआई या आगामी देयताएं नहीं हैं।", category: 'emi' };
+      }
+      
+      const totalAmount = activeLiabs.reduce((sum, l) => sum + l.amount, 0);
+      const liabDetails = activeLiabs.map(l => `${l.title}: ₹${l.amount}`).join(', ');
+      
+      if (lang === 'EN') {
+        return {
+          text: `You have ${activeLiabs.length} active EMIs totaling Rupees ${totalAmount.toLocaleString()}. These are: ${liabDetails}.`,
+          category: 'emi'
+        };
+      } else if (lang === 'MR') {
+        return {
+          text: `थांरी ${activeLiabs.length} लोन ईएमआई है, जिको कुल रुपिया ₹${totalAmount.toLocaleString()} है। विवरन: ${liabDetails}.`,
+          category: 'emi'
+        };
+      } else {
+        return {
+          text: `आपकी ${activeLiabs.length} सक्रिय ईएमआई हैं, जिनका कुल मूल्य ₹${totalAmount.toLocaleString()} है। विवरण: ${liabDetails}।`,
+          category: 'emi'
+        };
+      }
+    }
+
+    // 5. Check Daily Budget Intent
+    const isBudget = q.includes('budget') || q.includes('limit') || q.includes('spend') || q.includes('today') || 
+                     q.includes('बजट') || q.includes('खर्च') || q.includes('सीमा');
+    if (isBudget) {
+      const limit = budgetMetrics?.dailySpendableLimit || 0;
+      const spent = budgetMetrics?.todaySpent || 0;
+      const remaining = budgetMetrics?.remainingDailyBudget || 0;
+      
+      if (lang === 'EN') {
+        return {
+          text: `Your daily spendable limit is Rupees ${limit}. Today you spent Rupees ${spent}. You have Rupees ${remaining} remaining in your daily budget.`,
+          category: 'budget'
+        };
+      } else if (lang === 'MR') {
+        return {
+          text: `थारो आज रो सीमा ₹${limit} है। आज थें ₹${spent} खरच करिया हो। थारे आज रो बच्योड़ो बजट ₹${remaining} है।`,
+          category: 'budget'
+        };
+      } else {
+        return {
+          text: `आपकी दैनिक सीमा ₹${limit} है। आज आपने ₹${spent} खर्च किए हैं। आपका आज का बचा हुआ दैनिक बजट ₹${remaining} है।`,
+          category: 'budget'
+        };
+      }
+    }
+
+    // Fallback
+    if (lang === 'EN') {
+      return {
+        text: "I didn't quite catch that. Please ask about your account balance, vault savings, upcoming EMIs, or daily budget.",
+        category: 'fallback'
+      };
+    } else if (lang === 'MR') {
+      return {
+        text: "मने समझ कोनी आयो। थारे बैलेंस, गुल्लक, ईएमआई या बजट रे बारे में पूछो सा।",
+        category: 'fallback'
+      };
+    } else {
+      return {
+        text: "मुझे ठीक से समझ नहीं आया। कृपया अपने खाता बैलेंस, गुल्लक बचत, आने वाली ईएमआई या दैनिक बजट के बारे में पूछें।",
+        category: 'fallback'
+      };
+    }
+  };
+
+  const handleUserQuery = async (queryText: string) => {
+    if (!queryText.trim()) return;
+    
+    setUserQueryText(queryText);
+    setIsThinking(true);
+    setTranscriptInput('');
+    
+    let processedQuery = queryText;
+    if (bhashiniConfig && voiceLang !== 'EN') {
+      try {
+        const sourceLang = voiceLang === 'HI' ? 'hi' : 'raj';
+        processedQuery = await bhashiniClient.translate(queryText, sourceLang, 'en', bhashiniConfig);
+      } catch (err) {
+        console.warn("Bhashini translation failed, matching on original text:", err);
+      }
+    }
+    
+    const { text: responseText } = generateVoiceResponse(processedQuery, voiceLang);
+    
+    setTimeout(() => {
+      setIsThinking(false);
+      setAssistantResponse(responseText);
+      
+      const newLog = {
+        id: 'voice_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+        user: queryText,
+        assistant: responseText,
+        timestamp: Date.now()
+      };
+      setVoiceHistory(prev => [newLog, ...prev]);
+      speakText(responseText, voiceLang);
+    }, 800);
+  };
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [paymentMode, setPaymentMode] = useState<'PHONE' | 'UPI'>('UPI');
   const [isEnteringUpiPin, setIsEnteringUpiPin] = useState(false);
@@ -1762,10 +2107,411 @@ function AppContent() {
                 })()}
               </div>
             </div>
-
           </div>
         )}
 
+        {/* TAB 5: VOICE ASSISTANT */}
+        {activeTab === 'voice' && (
+          <div style={styles.tabContainer}>
+            <style>{`
+              @keyframes pulseGlow {
+                0% { transform: scale(0.95); opacity: 0.85; box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.5); }
+                70% { transform: scale(1.05); opacity: 1; box-shadow: 0 0 0 24px rgba(56, 189, 248, 0); }
+                100% { transform: scale(0.95); opacity: 0.85; box-shadow: 0 0 0 0 rgba(56, 189, 248, 0); }
+              }
+              @keyframes listenPulse {
+                0% { transform: scale(1); opacity: 0.2; }
+                50% { transform: scale(1.25); opacity: 0.5; }
+                100% { transform: scale(1); opacity: 0.2; }
+              }
+              @keyframes waveBounce {
+                0%, 100% { height: 8px; }
+                50% { height: 42px; }
+              }
+              .orb-active-listening {
+                animation: pulseGlow 1.5s infinite ease-in-out;
+                background: radial-gradient(circle, #0284c7 0%, #38bdf8 100%) !important;
+              }
+              .orb-active-speaking {
+                animation: pulseGlow 1.2s infinite ease-in-out;
+                background: radial-gradient(circle, #10b981 0%, #34d399 100%) !important;
+              }
+              .orb-thinking {
+                animation: spin 1s infinite linear;
+                border: 4px dashed #38bdf8 !important;
+                background: transparent !important;
+              }
+              .pulse-ring-1 {
+                animation: listenPulse 2s infinite ease-in-out;
+              }
+              .pulse-ring-2 {
+                animation: listenPulse 2s infinite ease-in-out 1s;
+              }
+              .wave-bar {
+                width: 4px;
+                border-radius: 2px;
+                background-color: #38bdf8;
+                display: inline-block;
+                margin: 0 3px;
+                height: 12px;
+              }
+              .wave-active {
+                animation: waveBounce 1.2s infinite ease-in-out;
+              }
+              @keyframes spin {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
+              }
+            `}</style>
+            
+            {/* Header / Compliance Banner */}
+            <div style={{
+              ...styles.card,
+              backgroundColor: themeColors.cardBg,
+              borderColor: themeColors.borderColor,
+              borderLeft: '4px solid ' + themeColors.primary,
+              padding: '12px 16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+              marginBottom: 4
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Globe size={18} color={themeColors.primary} />
+                <span style={{ fontSize: 13, fontWeight: 700, color: themeColors.textColor }}>
+                  FundKosh Sahayak • Voice Assistant
+                </span>
+              </div>
+              <p style={{
+                margin: 0,
+                fontSize: 11,
+                color: isDarkMode ? '#94a3b8' : '#64748b',
+                lineHeight: '1.4'
+              }}>
+                <strong>SEBI Compliance Notice:</strong> FundKosh Sahayak acts strictly as a financial information tool. We do not provide personalized financial, investment, or lending advice.
+              </p>
+            </div>
+
+            {/* Main Assistant Panel */}
+            <div style={{ ...styles.card, backgroundColor: themeColors.cardBg, borderColor: themeColors.borderColor, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '24px 16px', gap: 20 }}>
+              
+              {/* Language Selection Toggle */}
+              <div style={{ display: 'flex', backgroundColor: isDarkMode ? '#1e293b' : '#f1f5f9', borderRadius: 24, padding: 3, width: '100%', maxWidth: 320 }}>
+                {(['HI', 'MR', 'EN'] as const).map(lang => (
+                  <button
+                    key={lang}
+                    onClick={() => {
+                      setVoiceLang(lang);
+                      setAssistantResponse('');
+                      setUserQueryText('');
+                    }}
+                    style={{
+                      flex: 1,
+                      border: 'none',
+                      backgroundColor: voiceLang === lang ? themeColors.primary : 'transparent',
+                      color: voiceLang === lang ? '#ffffff' : (isDarkMode ? '#94a3b8' : '#475569'),
+                      fontWeight: 700,
+                      fontSize: 12,
+                      padding: '8px 12px',
+                      borderRadius: 20,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    {lang === 'HI' ? 'Hindi' : lang === 'MR' ? 'Marwadi' : 'English'}
+                  </button>
+                ))}
+              </div>
+
+              {/* Glowing Audio Orb and Soundwave animations */}
+              <div style={{ position: 'relative', width: 200, height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                
+                {/* Outer Listening Pulsing Rings */}
+                {isListening && (
+                  <>
+                    <div className="pulse-ring-1" style={{ position: 'absolute', width: '100%', height: '100%', borderRadius: '50%', backgroundColor: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)' }} />
+                    <div className="pulse-ring-2" style={{ position: 'absolute', width: '80%', height: '80%', borderRadius: '50%', backgroundColor: 'rgba(56, 189, 248, 0.15)', border: '1px solid rgba(56, 189, 248, 0.25)' }} />
+                  </>
+                )}
+
+                {/* Outer Speaking Pulsing Rings */}
+                {isSpeaking && (
+                  <>
+                    <div className="pulse-ring-1" style={{ position: 'absolute', width: '100%', height: '100%', borderRadius: '50%', backgroundColor: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.2)' }} />
+                    <div className="pulse-ring-2" style={{ position: 'absolute', width: '80%', height: '80%', borderRadius: '50%', backgroundColor: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.25)' }} />
+                  </>
+                )}
+
+                {/* Central Interactive Orb Button */}
+                <button
+                  onClick={startListening}
+                  className={`
+                    ${isListening ? 'orb-active-listening' : ''} 
+                    ${isSpeaking ? 'orb-active-speaking' : ''} 
+                    ${isThinking ? 'orb-thinking' : ''}
+                  `}
+                  style={{
+                    width: 100,
+                    height: 100,
+                    borderRadius: '50%',
+                    backgroundColor: isDarkMode ? '#1e293b' : '#f0f9ff',
+                    border: `4px solid ${themeColors.primary}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    boxShadow: '0 10px 25px -5px rgba(56, 189, 248, 0.3)',
+                    zIndex: 10,
+                    transition: 'all 0.3s ease',
+                    position: 'relative'
+                  }}
+                >
+                  {isListening ? (
+                    <Mic size={42} color="#ffffff" />
+                  ) : isSpeaking ? (
+                    <Volume2 size={42} color="#ffffff" />
+                  ) : isThinking ? (
+                    <span style={{ fontSize: 10, fontWeight: 800, color: themeColors.primary }}>AI...</span>
+                  ) : (
+                    <Mic size={42} color={themeColors.primary} />
+                  )}
+                </button>
+              </div>
+
+              {/* Status Indicator text */}
+              <div style={{ textAlign: 'center' }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: themeColors.primary }}>
+                  {isListening ? 'Listening...' : isSpeaking ? 'Speaking...' : isThinking ? 'Processing...' : 'Tap Orb to Speak'}
+                </span>
+                <p style={{ margin: '4px 0 0 0', fontSize: 11, color: isDarkMode ? '#94a3b8' : '#64748b' }}>
+                  ⚡ Powered by Bhashini AI (Secure Backend Gateway)
+                </p>
+              </div>
+
+              {/* Bouncing Audio Bars Wave (shown when speaking or listening) */}
+              {(isListening || isSpeaking) && (
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 42 }}>
+                  <div className={`wave-bar ${isListening || isSpeaking ? 'wave-active' : ''}`} style={{ animationDelay: '0.1s' }} />
+                  <div className={`wave-bar ${isListening || isSpeaking ? 'wave-active' : ''}`} style={{ animationDelay: '0.3s', backgroundColor: isSpeaking ? '#10b981' : '#38bdf8' }} />
+                  <div className={`wave-bar ${isListening || isSpeaking ? 'wave-active' : ''}`} style={{ animationDelay: '0.5s', backgroundColor: isSpeaking ? '#059669' : '#0284c7' }} />
+                  <div className={`wave-bar ${isListening || isSpeaking ? 'wave-active' : ''}`} style={{ animationDelay: '0.2s', backgroundColor: isSpeaking ? '#34d399' : '#60a5fa' }} />
+                  <div className={`wave-bar ${isListening || isSpeaking ? 'wave-active' : ''}`} style={{ animationDelay: '0.4s' }} />
+                </div>
+              )}
+
+              {/* Live Transcripts Panels */}
+              {(userQueryText || assistantResponse || isThinking) && (
+                <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
+                  
+                  {userQueryText && (
+                    <div style={{ ...styles.previewBox, padding: 10, backgroundColor: isDarkMode ? 'rgba(255,255,255,0.02)' : '#f8fafc' }}>
+                      <span style={{ fontSize: 9, fontWeight: 800, color: '#64748b', display: 'block', textTransform: 'uppercase', marginBottom: 2 }}>You Asked</span>
+                      <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: themeColors.bodyText }}>
+                        "{userQueryText}"
+                      </p>
+                    </div>
+                  )}
+
+                  {isThinking ? (
+                    <div style={{ ...styles.previewBox, padding: 10, backgroundColor: isDarkMode ? 'rgba(255,255,255,0.02)' : '#f8fafc', borderStyle: 'dashed' }}>
+                      <span style={{ fontSize: 11, color: themeColors.textColor }} className="animate-pulse">Thinking...</span>
+                    </div>
+                  ) : assistantResponse && (
+                    <div style={{
+                      ...styles.previewBox,
+                      padding: 12,
+                      backgroundColor: isDarkMode ? 'rgba(56, 189, 248, 0.05)' : '#f0f9ff',
+                      borderColor: themeColors.borderColor,
+                      borderLeft: '4px solid ' + (assistantResponse.includes('SEBI') || assistantResponse.includes('सेबी') ? '#f59e0b' : themeColors.primary)
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+                        <span style={{ fontSize: 9, fontWeight: 800, color: themeColors.primary, textTransform: 'uppercase' }}>Assistant</span>
+                        <button
+                          onClick={() => speakText(assistantResponse, voiceLang)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: themeColors.primary,
+                            cursor: 'pointer',
+                            padding: 2,
+                            display: 'flex',
+                            alignItems: 'center'
+                          }}
+                          title="Repeat speech"
+                        >
+                          <Volume2 size={14} />
+                        </button>
+                      </div>
+                      <p style={{ margin: 0, fontSize: 13, color: themeColors.bodyText, lineHeight: '1.4', fontWeight: 500 }}>
+                        {assistantResponse}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Text Input Fallback */}
+              <div style={{ width: '100%', borderTop: `1px solid ${themeColors.borderColor}`, paddingTop: 16 }}>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleUserQuery(transcriptInput);
+                  }}
+                  style={{ display: 'flex', gap: 8 }}
+                >
+                  <input
+                    type="text"
+                    value={transcriptInput}
+                    onChange={(e) => setTranscriptInput(e.target.value)}
+                    placeholder="Type query (e.g. check balance)"
+                    style={{
+                      ...styles.input,
+                      flex: 1,
+                      borderRadius: 12,
+                      padding: '10px 14px'
+                    }}
+                  />
+                  <button
+                    type="submit"
+                    style={{
+                      backgroundColor: themeColors.primary,
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: 12,
+                      padding: '0 16px',
+                      fontWeight: 700,
+                      fontSize: 13,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Send
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            {/* Predefined Suggestion Chips */}
+            <div style={{ ...styles.card, backgroundColor: themeColors.cardBg, borderColor: themeColors.borderColor }}>
+              <span style={{ fontSize: 11, fontWeight: 800, color: '#64748b', display: 'block', textTransform: 'uppercase', marginBottom: 10 }}>
+                💡 Quick Questions
+              </span>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                {(voiceLang === 'EN' ? [
+                  { text: 'What is my account balance?', q: 'What is my account balance' },
+                  { text: 'Check my vault savings', q: 'Check my vault savings' },
+                  { text: 'What is my daily budget?', q: 'What is my daily budget' },
+                  { text: 'Show upcoming EMIs', q: 'Show upcoming EMIs' },
+                  { text: 'Give investment advice', q: 'Give investment advice' },
+                  { text: 'How much do I earn?', q: 'How much do I earn' }
+                ] : voiceLang === 'MR' ? [
+                  { text: 'खाते में कितरा पिया है?', q: 'खाते में कितरा पिया है' },
+                  { text: 'गुल्लक री बचत कतरी है?', q: 'गुल्लक री बचत कतरी है' },
+                  { text: 'म्हारो आज रो बजट कितरो है?', q: 'म्हारो आज रो बजट कितरो है' },
+                  { text: 'लोन री EMI दिखाओ', q: 'लोन री EMI दिखाओ' },
+                  { text: 'कमाई कटे निवेश करां?', q: 'कमाई कटे निवेश करां' },
+                  { text: 'बैलेंस कतरो है?', q: 'बैलेंस कतरो है' }
+                ] : [
+                  { text: 'खाता बैलेंस कितना है?', q: 'खाता बैलेंस कितना है' },
+                  { text: 'गुल्लक में कितनी बचत है?', q: 'गुल्लक में कितनी बचत है' },
+                  { text: 'मेरा आज का बजट क्या है?', q: 'मेरा आज का बजट क्या है' },
+                  { text: 'आने वाली EMI दिखाओ', q: 'आने वाली EMI दिखाओ' },
+                  { text: 'पैसे कहां निवेश करें?', q: 'पैसे कहां निवेश करें' },
+                  { text: 'दैनिक खर्च सीमा क्या है?', q: 'दैनिक खर्च सीमा क्या है' }
+                ]).map((chip, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleUserQuery(chip.q)}
+                    style={{
+                      backgroundColor: isDarkMode ? 'rgba(255,255,255,0.03)' : '#f8fafc',
+                      border: `1px solid ${themeColors.borderColor}`,
+                      borderRadius: 10,
+                      padding: '8px 12px',
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: isDarkMode ? '#cbd5e1' : '#475569',
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.2s',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4
+                    }}
+                  >
+                    💬 {chip.text}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Conversation History Log */}
+            {voiceHistory.length > 0 && (
+              <div style={{ ...styles.card, backgroundColor: themeColors.cardBg, borderColor: themeColors.borderColor }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>
+                    📜 Conversation Logs
+                  </span>
+                  <button
+                    onClick={() => setVoiceHistory([])}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#ef4444',
+                      fontSize: 10,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 2
+                    }}
+                  >
+                    <Trash2 size={12} /> Clear Logs
+                  </button>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 250, overflowY: 'auto', paddingRight: 4 }}>
+                  {voiceHistory.map(log => (
+                    <div
+                      key={log.id}
+                      style={{
+                        padding: 10,
+                        backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.02)' : '#ffffff',
+                        border: `1px solid ${themeColors.borderColor}`,
+                        borderRadius: 8
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: themeColors.bodyText }}>
+                          🗣️ User: "{log.user}"
+                        </span>
+                        <span style={{ fontSize: 9, color: '#94a3b8' }}>
+                          {new Date(log.timestamp).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', marginTop: 4 }}>
+                        <button
+                          onClick={() => speakText(log.assistant, voiceLang)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: themeColors.primary,
+                            cursor: 'pointer',
+                            padding: '2px 0 0 0'
+                          }}
+                        >
+                          <Volume2 size={12} />
+                        </button>
+                        <p style={{ margin: 0, fontSize: 12, color: isDarkMode ? '#cbd5e1' : '#475569', lineHeight: '1.4' }}>
+                          🤖 {log.assistant}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+          </div>
+        )}
+      
       </main>
 
       {/* Floating Support & Sandbox Button */}
@@ -2851,6 +3597,78 @@ function AppContent() {
         </div>
       )}
 
+
+      {/* Voice Input Simulator Modal */}
+      {showVoiceSimulator && (
+        <div style={styles.modalOverlay}>
+          <div style={{ ...styles.modalContent, maxWidth: 360 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: themeColors.primary, display: 'flex', alignItems: 'center', gap: 6 }}>
+                🎤 Voice Demo Simulator
+              </span>
+              <button 
+                onClick={() => setShowVoiceSimulator(false)}
+                style={{ background: 'none', border: 'none', color: isDarkMode ? '#cbd5e1' : '#475569', cursor: 'pointer', padding: 4 }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <p style={{ ...styles.description, fontSize: 11, marginBottom: 16, lineHeight: '1.4' }}>
+              Select a phrase to simulate speaking into the microphone for the demonstration:
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {(voiceLang === 'EN' ? [
+                'What is my account balance?',
+                'Check my vault savings',
+                'What is my daily budget?',
+                'Show upcoming EMIs',
+                'Give investment advice'
+              ] : voiceLang === 'MR' ? [
+                'खाते में कितरा पिया है?',
+                'गुल्लक री बचत कतरी है?',
+                'म्हारो आज रो बजट कितरो है?',
+                'लोन री EMI दिखाओ',
+                'कमाई कटे निवेश करां?'
+              ] : [
+                'खाता बैलेंस कितना है?',
+                'गुल्लक में कितनी बचत है?',
+                'मेरा आज का बजट क्या है?',
+                'आने वाली EMI दिखाओ',
+                'पैसे कहां निवेश करें?'
+              ]).map((phrase, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => {
+                    setShowVoiceSimulator(false);
+                    // Start listening animation
+                    setIsListening(true);
+                    setUserQueryText(phrase);
+                    setTimeout(() => {
+                      setIsListening(false);
+                      handleUserQuery(phrase);
+                    }, 1500);
+                  }}
+                  style={{
+                    backgroundColor: isDarkMode ? 'rgba(255,255,255,0.03)' : '#f8fafc',
+                    border: `1px solid ${themeColors.borderColor}`,
+                    color: themeColors.bodyText,
+                    borderRadius: 10,
+                    padding: '10px 12px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  " {phrase} "
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Mobile Bottom Navigation Bar */}
       <nav style={{ 
         ...styles.bottomNav, 
@@ -2886,6 +3704,16 @@ function AppContent() {
         >
           <PiggyBank size={20} />
           <span>Vault</span>
+        </button>
+        <button 
+          onClick={() => setActiveTab('voice')}
+          style={activeTab === 'voice' 
+            ? { ...styles.navTab, color: themeColors.textColor } 
+            : { ...styles.navTab, color: isDarkMode ? '#94a3b8' : '#64748b' }
+          }
+        >
+          <Mic size={20} />
+          <span>Voice</span>
         </button>
         <button 
           onClick={() => setActiveTab('budget')}

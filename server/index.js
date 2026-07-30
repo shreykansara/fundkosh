@@ -950,6 +950,83 @@ app.post('/api/vault/manual-sweep', async (req, res) => {
   }
   res.json(user?.vault || {});
 });
+// Bhashini API CORS Proxy Endpoints
+app.post('/api/bhashini/pipeline', async (req, res) => {
+  const apiKey = process.env.BHASHINI_API_KEY;
+  const userId = process.env.BHASHINI_USER_ID;
+  const pipelineId = process.env.BHASHINI_PIPELINE_ID;
+
+  if (!apiKey || !userId || !pipelineId || apiKey.includes('your_bhashini_api_key_here')) {
+    return res.status(400).json({ error: 'Bhashini API credentials not configured in backend .env file.' });
+  }
+
+  try {
+    const response = await fetch('https://meity-auth.ulcacognitive.org/ulca/apis/v0/model/getModelsPipeline', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'ulcaApiKey': apiKey,
+        'userID': userId
+      },
+      body: JSON.stringify({
+        pipelineTasks: [
+          { taskType: 'asr' },
+          { taskType: 'translation' },
+          { taskType: 'tts' }
+        ],
+        pipelineRequestConfig: {
+          pipelineId: pipelineId
+        }
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      return res.status(response.status).json({ error: `Bhashini config failed: ${errText}` });
+    }
+
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('Bhashini Pipeline Proxy Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/bhashini/compute', async (req, res) => {
+  const { computeUrl, authorization, pipelineTasks, inputData } = req.body;
+  if (!computeUrl || !pipelineTasks || !inputData) {
+    return res.status(400).json({ error: 'Missing computeUrl, pipelineTasks or inputData' });
+  }
+
+  try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (authorization) {
+      headers['Authorization'] = authorization;
+    }
+
+    const response = await fetch(computeUrl, {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify({
+        pipelineTasks,
+        inputData
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      return res.status(response.status).json({ error: `Bhashini compute failed: ${errText}` });
+    }
+
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('Bhashini Compute Proxy Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 
 app.listen(PORT, () => {
   console.log(`🚀 FundKosh Express API Server running on http://localhost:${PORT}`);
