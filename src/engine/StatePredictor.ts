@@ -26,12 +26,13 @@ export class StatePredictor {
     const userBalance = user ? user.balance : 0;
     const userId = user ? user.id : 'usr_01';
 
-    const liabilities30Days = await this.liabilityRepo.getTotalLiabilitiesAmount(userId, 30);
-    const liabilities3Days = await this.liabilityRepo.getTotalLiabilitiesAmount(userId, 3);
+    const [liabilities30Days, liabilities3Days, velocity, todaySpend] = await Promise.all([
+      this.liabilityRepo.getTotalLiabilitiesAmount(userId, 30),
+      this.liabilityRepo.getTotalLiabilitiesAmount(userId, 3),
+      this.transactionRepo.getRecentVelocity(userUpi, 2),
+      this.transactionRepo.getTodayTotalSpend(userUpi)
+    ]);
     const availableCushion = Math.max(0, userBalance - liabilities30Days);
-
-    const velocity = await this.transactionRepo.getRecentVelocity(userUpi, 2);
-    const todaySpend = await this.transactionRepo.getTodayTotalSpend(userUpi);
 
     const now = new Date();
     const currentHour = now.getHours();

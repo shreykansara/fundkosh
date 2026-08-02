@@ -31,14 +31,16 @@ export class DailyBudgetCalculator {
     const incomeForecast = this.forecaster.forecastIncome(weather, event);
     const predictedMonthlyIncome = incomeForecast.totalPredictedMonthly;
 
-    const totalActiveLiabilities = await this.liabilityRepo.getTotalLiabilitiesAmount(userId, 30);
+    const [totalActiveLiabilities, todaySpent] = await Promise.all([
+      this.liabilityRepo.getTotalLiabilitiesAmount(userId, 30),
+      this.transactionRepo.getTodayTotalSpend(userUpi)
+    ]);
     const netSpendablePool = Math.max(0, predictedMonthlyIncome - totalActiveLiabilities);
 
     const daysInMonth = 30;
     const rawDailyLimit = Math.round(netSpendablePool / daysInMonth);
     const dailySpendableLimit = Math.max(100, rawDailyLimit - baselineDailySpend);
 
-    const todaySpent = await this.transactionRepo.getTodayTotalSpend(userUpi);
     const remainingDailyBudget = Math.max(0, dailySpendableLimit - todaySpent);
 
     return {

@@ -958,12 +958,7 @@ function AppContent() {
       });
       setIsPaymentModalOpen(true);
 
-      const updatedEntities = await apiClient.getEntities();
-      const updatedMe = updatedEntities.find(ent => ent.upi_id === senderUpi);
-      if (updatedMe) {
-        setCurrentUser(updatedMe);
-      }
-      refreshAppData();
+      await refreshAppData();
     } else if (result.status === 'FAILED') {
       setStatusMessage(`❌ Payment Failed: ${result.errorMessage}`);
       setPaymentResult({
