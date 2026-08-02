@@ -725,17 +725,16 @@ function AppContent() {
 
   // Load Data & Run App-Launch Prediction
   const refreshAppData = async () => {
-    const health = await apiClient.checkHealth();
-    setMongoConnected(health.mongoConnected);
-
     const activeUpi = currentUser?.upi_id || senderUpi;
-    const [e, l, t, v] = await Promise.all([
+    const [health, e, l, t, v] = await Promise.all([
+      apiClient.checkHealth(),
       apiClient.getEntities(),
       apiClient.getLiabilities(),
       apiClient.getTransactions(),
       apiClient.getVault(activeUpi)
     ]);
 
+    setMongoConnected(health.mongoConnected);
     setEntities(e);
     setLiabilities(l);
     setTransactions(t);
@@ -785,7 +784,7 @@ function AppContent() {
 
   useEffect(() => {
     refreshAppData();
-  }, [weather, eventVector, senderUpi]);
+  }, [weather, eventVector, currentUser?.upi_id]);
 
   useEffect(() => {
     if (currentUser) {
