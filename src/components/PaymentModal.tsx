@@ -94,8 +94,24 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   handleSendPayment,
   handleKeypadPress
 }) => {
-  const { isDarkMode, getThemeColors } = useRiskTheme();
-  const themeColors = getThemeColors();
+  const { isDarkMode } = useRiskTheme();
+  const themeColors = isDarkMode ? {
+    primary: '#38bdf8',
+    cardBg: '#1e293b',
+    borderColor: 'rgba(56, 189, 248, 0.2)',
+    glowShadow: '0 8px 30px rgba(56, 189, 248, 0.08)',
+    badgeBg: 'rgba(56, 189, 248, 0.15)',
+    textColor: '#38bdf8',
+    bodyText: '#f8fafc'
+  } : {
+    primary: '#0284c7',
+    cardBg: '#ffffff',
+    borderColor: 'rgba(2, 132, 199, 0.15)',
+    glowShadow: '0 8px 30px rgba(2, 132, 199, 0.06)',
+    badgeBg: 'rgba(2, 132, 199, 0.1)',
+    textColor: '#0284c7',
+    bodyText: '#0f172a'
+  };
 
   if (!isPaymentModalOpen) return null;
 
@@ -637,7 +653,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                   display: 'flex', 
                   alignItems: 'center', 
                   gap: 12, 
-                  backgroundColor: isDarkMode ? '#101c16' : '#f0fdf4', 
+                  backgroundColor: isDarkMode ? 'rgba(56, 189, 248, 0.08)' : 'rgba(2, 132, 199, 0.08)', 
                   border: '1px solid ' + themeColors.borderColor, 
                   borderRadius: 12, 
                   padding: 12,
@@ -659,7 +675,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                     <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: themeColors.textColor }}>
                       {verifiedRecipient.name}
                     </h4>
-                    <span style={{ fontSize: 10, color: '#16a34a', fontWeight: 700 }}>
+                    <span style={{ fontSize: 10, color: themeColors.primary, fontWeight: 700 }}>
                       Verified Name: {verifiedRecipient.name.toUpperCase()}
                     </span>
                   </div>
@@ -669,7 +685,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 {/* Currency Amount Display */}
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '8px 0 12px 0', gap: 6 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: 32, fontWeight: 800, color: '#16a34a' }}>₹</span>
+                    <span style={{ fontSize: 32, fontWeight: 800, color: themeColors.primary }}>₹</span>
                     <input 
                       type="number" 
                       value={amount === 0 ? '' : amount} 
@@ -811,7 +827,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                         gap: 8, 
                         marginTop: 8, 
                         fontSize: 11, 
-                        color: '#16a34a', 
+                        color: themeColors.primary, 
                         cursor: 'pointer',
                         userSelect: 'none',
                         fontWeight: 600
@@ -820,7 +836,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                           type="checkbox" 
                           checked={optInRoundUp} 
                           onChange={e => setOptInRoundUp(e.target.checked)}
-                          style={{ cursor: 'pointer', accentColor: '#16a34a' }}
+                          style={{ cursor: 'pointer', accentColor: themeColors.primary }}
                         />
                         <span>Auto Spare Change Round-Up: <strong>+₹{liveEvaluation.roundUpAmount}</strong> → Vault</span>
                       </label>

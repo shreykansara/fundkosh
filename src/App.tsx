@@ -1142,6 +1142,7 @@ function AppContent() {
             setCustomLiabilities={setCustomLiabilities}
             handleCreateAccount={handleCreateAccount}
             setShowCreateAccountWizard={setShowCreateAccountWizard}
+            isBlueTheme={isBlueTheme}
           />
         )}
       </div>
@@ -1150,7 +1151,7 @@ function AppContent() {
 
   return (
     <div style={{ ...styles.appShell, background: themeColors.bgGradient, color: themeColors.bodyText }}>
-      <Header currentUser={currentUser} />
+      <Header currentUser={currentUser} isBlueTheme={isBlueTheme} />
 
       <main style={styles.mainContent}>
         {activeTab === 'pay' && (
