@@ -68,7 +68,7 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
     tabContainer: { display: 'flex', flexDirection: 'column', gap: 16 },
     card: { backgroundColor: themeColors.cardBg, borderRadius: 16, padding: 16, border: '1px solid ' + themeColors.borderColor, boxShadow: themeColors.glowShadow },
     input: { backgroundColor: themeColors.cardBg, border: '1px solid ' + themeColors.borderColor, borderRadius: 8, padding: '10px', color: themeColors.bodyText, fontSize: 14, outline: 'none' },
-    previewBox: { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.03)' : '#f8fafc', padding: 12, borderRadius: 10, border: '1px dashed ' + themeColors.borderColor }
+    previewBox: { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.03)' : '#f8fafc', padding: 12, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', borderColor: themeColors.borderColor }
   };
 
   return (
@@ -271,16 +271,18 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
             )}
 
             {isThinking ? (
-              <div style={{ ...styles.previewBox, padding: 10, backgroundColor: isDarkMode ? 'rgba(255,255,255,0.02)' : '#f8fafc', borderStyle: 'dashed' }}>
+              <div style={{ ...styles.previewBox, padding: 10, backgroundColor: isDarkMode ? 'rgba(255,255,255,0.02)' : '#f8fafc' }}>
                 <span style={{ fontSize: 11, color: themeColors.textColor }} className="animate-pulse">Thinking...</span>
               </div>
             ) : assistantResponse && (
               <div style={{
-                ...styles.previewBox,
-                padding: 12,
                 backgroundColor: isDarkMode ? 'rgba(56, 189, 248, 0.05)' : '#f0f9ff',
+                padding: 12,
+                borderRadius: 10,
+                borderWidth: '1px 1px 1px 4px',
+                borderStyle: 'solid',
                 borderColor: themeColors.borderColor,
-                borderLeft: '4px solid ' + (assistantResponse.includes('SEBI') || assistantResponse.includes('सेबी') ? '#f59e0b' : themeColors.primary)
+                borderLeftColor: (assistantResponse.includes('SEBI') || assistantResponse.includes('सेबी') ? '#f59e0b' : themeColors.primary)
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
                   <span style={{ fontSize: 9, fontWeight: 800, color: themeColors.primary, textTransform: 'uppercase' }}>Assistant</span>

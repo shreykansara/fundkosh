@@ -249,137 +249,150 @@ function AppContent() {
 
   const generateVoiceResponse = (query: string, lang: 'HI' | 'MR' | 'EN'): { text: string; category: string } => {
     const q = query.toLowerCase();
-    
-    // 1. Check Compliance / Advice Intent
+
+
+
+    // 2. Check Compliance / Advice Intent (SEBI / RBI)
     const isAdvice = q.includes('advice') || q.includes('invest') || q.includes('stocks') || q.includes('tip') || 
                      q.includes('recommend') || q.includes('सलाह') || q.includes('निवेश') || q.includes('शेयर') ||
-                     q.includes('म्यूचुअल') || q.includes('म्युचुअल') || q.includes('फंड');
+                     q.includes('म्यूचुअल') || q.includes('म्युचुअल') || q.includes('फंड') || q.includes('सिफारिश');
                      
     if (isAdvice) {
       if (lang === 'EN') {
         return {
-          text: "Under SEBI Investment Adviser Regulations, I am a financial information assistant and cannot provide personalized advice or recommendations. I can only display your balance, vault, budgets, and EMIs.",
+          text: "Under financial regulations, I am an information assistant and cannot provide investment advice or recommend specific stocks, mutual funds, or products. I can explain risk analysis, but no financial recommendations will be given.",
           category: 'compliance'
         };
       } else if (lang === 'MR') {
         return {
-          text: "सेबी (SEBI) नियमां रे मुजब, मैं एक वित्तीय सूचना सहायक हूँ और खुद री कोई निवेश सलाह नी दे सकूँ। पण, मैं थारो बैलेंस, गुल्लक, बजट और ईएमआई दिखा सकूँ।",
+          text: "वित्तीय नियमां रे मुजब, मैं एक सूचना सहायक हूँ और निवेश री सलाह या शेयर, म्यूचुअल फंड री सिफारिश नी दे सकूँ। मैं जोखिम विश्लेषण रे बारे में बता सकूँ, पण कोई वित्तीय सिफारिश नी दी जावेला।",
           category: 'compliance'
         };
       } else {
         return {
-          text: "सेबी (SEBI) निवेश सलाहकार नियमों के तहत, मैं एक वित्तीय सूचना सहायक हूं और व्यक्तिगत निवेश सलाह या सिफारिशें नहीं दे सकता। मैं केवल आपका बैलेंस, गुल्लक, बजट और ईएमआई दिखा सकता हूं।",
+          text: "वित नियमों के तहत, मैं एक सूचना सहायक हूँ और निवेश की सलाह या विशिष्ट शेयरों, म्यूचुअल फंड या उत्पादों की सिफारिश नहीं दे सकता। मैं जोखिम विश्लेषण के तरीके को समझा सकता हूँ, लेकिन कोई वित्तीय सिफारिश नहीं दी जाएगी।",
           category: 'compliance'
         };
       }
     }
 
-    // 2. Check Balance Intent
-    const isBalance = q.includes('balance') || q.includes('money') || q.includes('amount') || q.includes('खाता') || 
-                      q.includes('बैलेंस') || q.includes('पैसा') || q.includes('कितना') || q.includes('पिया') || 
-                      q.includes('कितरा');
-    if (isBalance) {
-      const bal = currentUser?.balance || 0;
+    // 3. Vault / Gullak Education
+    const isVaultEd = q.includes('vault') || q.includes('gullak') || q.includes('gulak') || q.includes('gullack') || 
+                      q.includes('gulluck') || q.includes('auto-save') || q.includes('autosave') || q.includes('auto save') || 
+                      q.includes('round-up') || q.includes('round up') || q.includes('spare change') || 
+                      q.includes('save money') || q.includes('piggy bank') || q.includes('savings box') ||
+                      q.includes('गुल्लक') || q.includes('ऑटो-सेव') || q.includes('ऑटो सेव');
+    if (isVaultEd) {
       if (lang === 'EN') {
         return {
-          text: `Your current Small Finance Bank account balance is Rupees ${bal.toLocaleString()}.`,
-          category: 'balance'
+          text: "A digital vault (or Gullak) helps you save money automatically. When you make a payment, the app rounds up the amount to the nearest 10 or 100 rupees and saves the spare change. It is an easy way to build savings daily without extra effort.",
+          category: 'vault_education'
         };
       } else if (lang === 'MR') {
         return {
-          text: `थारो अभी रो खातो बैलेंस ₹${bal.toLocaleString()} है।`,
-          category: 'balance'
+          text: "डिजिटल गुल्लक थांने अपने आप रुपिया बचावण में मदद करे। जदि थें कोई भुगताण करो, तो ऐप रुपिया ने 10 या 100 रे राउंड-अप में बदल देवे और बच्या रुपिया गुल्लक में डाल देवे। ओ बिना कोई माथाफोड़ी रे रोज री बचत करनो आसान तरीको है।",
+          category: 'vault_education'
         };
       } else {
         return {
-          text: `आपका वर्तमान खाता बैलेंस ₹${bal.toLocaleString()} है।`,
-          category: 'balance'
+          text: "डिजिटल गुल्लक आपको स्वचालित रूप से पैसे बचाने में मदद करता है। जब आप कोई भुगतान करते हैं, तो ऐप राशि को निकटतम 10 या 100 रुपये में राउंड-अप करता है और बची हुई चिल्लर को गुल्लक में जमा कर देता है। यह बिना किसी अतिरिक्त प्रयास के दैनिक बचत करने का एक आसान तरीका है।",
+          category: 'vault_education'
         };
       }
     }
 
-    // 3. Check Vault Intent
-    const isVault = q.includes('vault') || q.includes('savings') || q.includes('save') || q.includes('gulak') || 
-                    q.includes('gullak') || q.includes('गुल्लक') || q.includes('बचत') || q.includes('ब्याज');
-    if (isVault) {
-      const vaultBal = vaultData?.balance || 0;
-      const flexiBal = vaultData?.flexi_rd_balance || 0;
-      const target = vaultData?.target_threshold || 100;
-      const rate = vaultData?.interest_rate || 7.2;
-      
+    // 4. Flexi RD Education
+    const isRdEd = q.includes('flexi rd') || q.includes('flexird') || q.includes('flexi-rd') || 
+                   q.includes('recurring deposit') || q.includes('rd interest') || q.includes('recurring') || 
+                   q.includes('deposit') || q.includes('फ्लेक्सी आरडी') || q.includes('आरडी क्या');
+    if (isRdEd) {
       if (lang === 'EN') {
         return {
-          text: `You have saved Rupees ${vaultBal} in your vault container. Your sweep target is Rupees ${target}. You also have Rupees ${flexiBal} in your Flexi RD account earning ${rate}% interest.`,
-          category: 'vault'
+          text: "A Flexi Recurring Deposit (RD) lets you save flexible amounts of money every month rather than a fixed sum. You earn high interest on these savings, helping your money grow over time, while keeping the freedom to deposit whenever you have spare cash.",
+          category: 'rd_education'
         };
       } else if (lang === 'MR') {
         return {
-          text: `थांरी गुल्लक में ₹${vaultBal} बच गया है। थारो स्वीप टारगेट ₹${target} है। थारे कनै फ्लेक्सी आरडी (Flexi RD) में भी ₹${flexiBal} है, जपे ${rate}% ब्याज मिल रह्यो है।`,
-          category: 'vault'
+          text: "फ्लेक्सी रिकरिंग डिपॉजिट (RD) थान्ने हर महीने फिक्स रुपिया रे बजाय थांरी सुविधा मुजब रुपिया बचावण री छूट देवे। इण पैसें पे थांने अच्छा ब्याज मिले, ज्यूं रुपिया बढेला और जदि थारे कनै जादा रुपिया होवे तो थें कदी भी जमा करा सको।",
+          category: 'rd_education'
         };
       } else {
         return {
-          text: `आपने अपने गुल्लक में ₹${vaultBal} बचाए हैं। आपका ऑटो-स्वीप लक्ष्य ₹${target} है। आपके पास फ्लेक्सी आरडी (Flexi RD) में ₹${flexiBal} हैं, जिस पर ${rate}% ब्याज मिल रहा है।`,
-          category: 'vault'
+          text: "फ्लेक्सी रिकरिंग डिपॉजिट (RD) आपको हर महीने एक निश्चित राशि के बजाय अपनी सुविधा अनुसार अलग-अलग राशि बचाने की अनुमति देता है। आप इन बचतों पर उच्च ब्याज कमाते हैं, जिससे आपका पैसा बढ़ता है, और जब भी आपके पास अतिरिक्त पैसे हों, तब जमा करने की आजादी रहती है।",
+          category: 'rd_education'
         };
       }
     }
 
-    // 4. Check EMI / Liabilities Intent
-    const isEMI = q.includes('emi') || q.includes('loan') || q.includes('due') || q.includes('liability') || 
-                  q.includes('rent') || q.includes('bill') || q.includes('किस्त') || q.includes('किश्त') || 
-                  q.includes('ऋण') || q.includes('देय') || q.includes('दायित्व');
-    if (isEMI) {
-      const activeLiabs = currentUser?.liabilities?.filter(l => l.is_active) || [];
-      if (activeLiabs.length === 0) {
-        if (lang === 'EN') return { text: "You do not have any active EMIs or upcoming liabilities.", category: 'emi' };
-        if (lang === 'MR') return { text: "थारे कनै कोई एक्टिव ईएमआई या लोन कोनी है।", category: 'emi' };
-        return { text: "आपके पास कोई सक्रिय ईएमआई या आगामी देयताएं नहीं हैं।", category: 'emi' };
-      }
-      
-      const totalAmount = activeLiabs.reduce((sum, l) => sum + l.amount, 0);
-      const liabDetails = activeLiabs.map(l => `${l.title}: ₹${l.amount}`).join(', ');
-      
+    // 5. Budgeting / Limits Education
+    const isBudgetEd = q.includes('why budget') || q.includes('what is budget') || q.includes('how does budget work') || 
+                       q.includes('spendable limit') || q.includes('budgeting') || q.includes('budget') || 
+                       q.includes('spending limit') || q.includes('limit') ||
+                       q.includes('बजट क्या') || q.includes('बजट क्यों') || q.includes('बजट कैसे काम') || q.includes('दैनिक सीमा') || q.includes('बजट');
+    if (isBudgetEd) {
       if (lang === 'EN') {
         return {
-          text: `You have ${activeLiabs.length} active EMIs totaling Rupees ${totalAmount.toLocaleString()}. These are: ${liabDetails}.`,
-          category: 'emi'
+          text: "A daily budget tracks your spending to help you plan. It sets a daily limit based on your monthly income and bills. By keeping within this limit, you ensure you have enough money left for important bills at the end of the month.",
+          category: 'budget_education'
         };
       } else if (lang === 'MR') {
         return {
-          text: `थांरी ${activeLiabs.length} लोन ईएमआई है, जिको कुल रुपिया ₹${totalAmount.toLocaleString()} है। विवरन: ${liabDetails}.`,
-          category: 'emi'
+          text: "रोज रो बजट थांरा खरच पे नजर राखे। ओ थांरी कमाई और महिने रे बिलां रे हिसाब स्यूं एक सीमा तय करे। इण सीमा रे अंदर खरच करने स्यूं महिने रे आखिरी में जरुरी कामां सारु थांरे कनै रुपिया बच जावेला।",
+          category: 'budget_education'
         };
       } else {
         return {
-          text: `आपकी ${activeLiabs.length} सक्रिय ईएमआई हैं, जिनका कुल मूल्य ₹${totalAmount.toLocaleString()} है। विवरण: ${liabDetails}।`,
-          category: 'emi'
+          text: "दैनिक बजट आपकी खर्च करने की आदतों पर नज़र रखता है ताकि आप योजना बना सकें। यह आपकी मासिक आय और बिलों के आधार पर एक दैनिक सीमा तय करता है। इस सीमा के भीतर रहकर आप यह सुनिश्चित करते हैं कि महीने के अंत में महत्वपूर्ण बिलों के लिए आपके पास पर्याप्त पैसे बचे रहें।",
+          category: 'budget_education'
         };
       }
     }
 
-    // 5. Check Daily Budget Intent
-    const isBudget = q.includes('budget') || q.includes('limit') || q.includes('spend') || q.includes('today') || 
-                     q.includes('बजट') || q.includes('खर्च') || q.includes('सीमा');
-    if (isBudget) {
-      const limit = budgetMetrics?.dailySpendableLimit || 0;
-      const spent = budgetMetrics?.todaySpent || 0;
-      const remaining = budgetMetrics?.remainingDailyBudget || 0;
-      
+    // 6. EMI / Loan Education
+    const isEmiEd = q.includes('what is emi') || q.includes('installment') || q.includes('how do loans work') || 
+                    q.includes('due dates') || q.includes('emi') || q.includes('loan') || q.includes('due') || 
+                    q.includes('liability') || q.includes('rent') || q.includes('bill') ||
+                    q.includes('ईएमआई क्या') || q.includes('लोन क्या') || q.includes('किस्त क्या') || q.includes('किश्त') || q.includes('किस्त') || q.includes('लोन');
+    if (isEmiEd) {
       if (lang === 'EN') {
         return {
-          text: `Your daily spendable limit is Rupees ${limit}. Today you spent Rupees ${spent}. You have Rupees ${remaining} remaining in your daily budget.`,
-          category: 'budget'
+          text: "An EMI (Equated Monthly Installment) is a fixed payment you make to a lender each month to repay a loan. It includes parts of both the loan amount and interest. Paying your EMIs on time helps maintain a good credit record and avoids extra penalty fees.",
+          category: 'emi_education'
         };
       } else if (lang === 'MR') {
         return {
-          text: `थारो आज रो सीमा ₹${limit} है। आज थें ₹${spent} खरच करिया हो। थारे आज रो बच्योड़ो बजट ₹${remaining} है।`,
-          category: 'budget'
+          text: "ईएमआई (EMI) एक फिक्स किस्त है जिकी थें लोन चुकावण सारु हर महिने देवे हो। इण में लोन रो मूल रुपिया और ब्याज दोनूं शामिल वे। टेम पे किस्त देण स्यूं थारो क्रेडिट रिकॉर्ड अच्छो रेवेला और कोई पेनल्टी भी नी लागे।",
+          category: 'emi_education'
         };
       } else {
         return {
-          text: `आपकी दैनिक सीमा ₹${limit} है। आज आपने ₹${spent} खर्च किए हैं। आपका आज का बचा हुआ दैनिक बजट ₹${remaining} है।`,
-          category: 'budget'
+          text: "ईएमआई (EMI) एक निश्चित मासिक किस्त है जो आप लोन चुकाने के लिए हर महीने देते हैं। इसमें लोन की मूल राशि और ब्याज दोनों शामिल होते हैं। समय पर ईएमआई चुकाने से आपका क्रेडिट रिकॉर्ड अच्छा रहता है और अतिरिक्त जुर्माना नहीं लगता।",
+          category: 'emi_education'
+        };
+      }
+    }
+
+    // 7. Risk Analysis / Score Education
+    const isRiskEd = q.includes('risk score') || q.includes('risk analysis') || q.includes('impulse score') || 
+                     q.includes('evaluate risk') || q.includes('risk') || q.includes('impulse') || 
+                     q.includes('evaluate') || q.includes('warning') || q.includes('warn') || 
+                     q.includes('analysis') || q.includes('score') ||
+                     q.includes('जोखिम क्या') || q.includes('रिस्क स्कोर क्या') || q.includes('जोखिम विश्लेषण') || q.includes('जोखिम') || q.includes('रिस्क');
+    if (isRiskEd) {
+      if (lang === 'EN') {
+        return {
+          text: "A risk score analyzes a transaction to check if it might lead to financial strain, such as overspending on impulsive purchases or missing upcoming bills. We provide this risk warning to help you make informed decisions, but we do not make recommendations or advise you on where to spend.",
+          category: 'risk_education'
+        };
+      } else if (lang === 'MR') {
+        return {
+          text: "जोखिम विश्लेषण ओ देखेला कि कटी कोई भुगताण थांने तंगी में नी डाल देवे, जियां बिना मतलब खरच करनो या महिने रा बिल चुकावण में तंगी आवणी। मैं थांने खाली सचेत कर सकूँ, पण कोई सलाह या सिफारिश नी दे सकूँ।",
+          category: 'risk_education'
+        };
+      } else {
+        return {
+          text: "जोखिम विश्लेषण यह देखता है कि कहीं कोई लेनदेन आपको वित्तीय परेशानी में तो नहीं डाल रहा है, जैसे जल्दबाजी में गैर-जरूरी खर्च करना या जरूरी बिलों के लिए पैसे कम पड़ना। हम केवल सचेत करते हैं, लेकिन कोई सलाह या सिफारिश नहीं देते हैं।",
+          category: 'risk_education'
         };
       }
     }
@@ -387,17 +400,17 @@ function AppContent() {
     // Fallback
     if (lang === 'EN') {
       return {
-        text: "I didn't quite catch that. Please ask about your account balance, vault savings, upcoming EMIs, or daily budget.",
+        text: "I do not have access to this information.",
         category: 'fallback'
       };
     } else if (lang === 'MR') {
       return {
-        text: "मने समझ कोनी आयो। थारे बैलेंस, गुल्लक, ईएमआई या बजट रे बारे में पूछो सा।",
+        text: "म्हारै कनै इण जाणकारी री पहुँच कोनी है।",
         category: 'fallback'
       };
     } else {
       return {
-        text: "मुझे ठीक से समझ नहीं आया। कृपया अपने खाता बैलेंस, गुल्लक बचत, आने वाली ईएमआई या दैनिक बजट के बारे में पूछें।",
+        text: "मेरे पास इस जानकारी तक पहुँच नहीं है।",
         category: 'fallback'
       };
     }
@@ -410,19 +423,65 @@ function AppContent() {
     setIsThinking(true);
     setTranscriptInput('');
     
-    let processedQuery = queryText;
-    if (bhashiniConfig && voiceLang !== 'EN') {
-      try {
+    try {
+      // Phase 1: Speech to English Text
+      let englishQuery = queryText;
+      if (bhashiniConfig && voiceLang !== 'EN') {
         const sourceLang = voiceLang === 'HI' ? 'hi' : 'raj';
-        processedQuery = await bhashiniClient.translate(queryText, sourceLang, 'en', bhashiniConfig);
-      } catch (err) {
-        console.warn("Bhashini translation failed, matching on original text:", err);
+        englishQuery = await bhashiniClient.translate(queryText, sourceLang, 'en', bhashiniConfig);
       }
-    }
-    
-    const { text: responseText } = generateVoiceResponse(processedQuery, voiceLang);
-    
-    setTimeout(() => {
+      
+      // Phase 2: Send to Groq API
+      const groqApiUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? 'http://localhost:5000/api/groq/chat'
+        : '/api/groq/chat';
+      const groqRes = await fetch(groqApiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: englishQuery })
+      });
+      
+      if (!groqRes.ok) {
+        throw new Error("Groq API request failed");
+      }
+      
+      const groqData = await groqRes.json();
+      const englishAnswer = groqData.response || '';
+      
+      // Phase 3: Translate English Answer back to the original language, then speak it
+      let finalAnswer = englishAnswer;
+      if (bhashiniConfig && voiceLang !== 'EN') {
+        const targetLang = voiceLang === 'HI' ? 'hi' : 'raj';
+        finalAnswer = await bhashiniClient.translate(englishAnswer, 'en', targetLang, bhashiniConfig);
+      }
+      
+      setIsThinking(false);
+      setAssistantResponse(finalAnswer);
+      
+      const newLog = {
+        id: 'voice_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+        user: queryText,
+        assistant: finalAnswer,
+        timestamp: Date.now()
+      };
+      setVoiceHistory(prev => [newLog, ...prev]);
+      
+      speakText(finalAnswer, voiceLang);
+      
+    } catch (err) {
+      console.error("3-Phase Pipeline Failed, falling back locally:", err);
+      // Fallback if APIs are offline or Groq not configured
+      let processedQuery = queryText;
+      if (bhashiniConfig && voiceLang !== 'EN') {
+        try {
+          const sourceLang = voiceLang === 'HI' ? 'hi' : 'raj';
+          processedQuery = await bhashiniClient.translate(queryText, sourceLang, 'en', bhashiniConfig);
+        } catch (e) {
+          console.warn("Bhashini translation fallback failed:", e);
+        }
+      }
+      const { text: responseText } = generateVoiceResponse(processedQuery, voiceLang);
+      
       setIsThinking(false);
       setAssistantResponse(responseText);
       
@@ -434,7 +493,7 @@ function AppContent() {
       };
       setVoiceHistory(prev => [newLog, ...prev]);
       speakText(responseText, voiceLang);
-    }, 800);
+    }
   };
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [paymentMode, setPaymentMode] = useState<'PHONE' | 'UPI'>('UPI');
@@ -599,7 +658,8 @@ function AppContent() {
           : (isDarkMode ? '#130909' : '#FBEBE9'));
 
   const styles: Record<string, React.CSSProperties> = {
-    appShell: { width: '100%', minHeight: '100vh', display: 'flex', flexDirection: 'column', boxSizing: 'border-box', fontFamily: 'Inter, sans-serif', color: themeColors.bodyText, paddingBottom: 80 },
+    desktopWrapper: { width: '100%', minHeight: '100vh', backgroundColor: isDarkMode ? '#020617' : '#0f172a', display: 'flex', justifyContent: 'center', alignItems: 'stretch' },
+    appShell: { width: '100%', maxWidth: '430px', minHeight: '100vh', margin: '0 auto', display: 'flex', flexDirection: 'column', boxSizing: 'border-box', fontFamily: 'Inter, sans-serif', color: themeColors.bodyText, paddingBottom: 80, borderLeft: '1px solid ' + themeColors.borderColor, borderRight: '1px solid ' + themeColors.borderColor, boxShadow: '0 0 40px rgba(0,0,0,0.15)', position: 'relative', overflowX: 'hidden' },
     centerContainer: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '80vh' },
     header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 16px 12px 16px', backgroundColor: 'transparent' },
     title: { fontSize: 22, fontWeight: 800, margin: 0, color: themeColors.primary },
@@ -634,7 +694,7 @@ function AppContent() {
     txList: { display: 'flex', flexDirection: 'column', gap: 8 },
     txItem: { backgroundColor: themeColors.cardBg, padding: 10, borderRadius: 8, border: '1px solid ' + themeColors.borderColor },
     seedBtn: { backgroundColor: themeColors.cardBg, border: '1px solid ' + themeColors.borderColor, color: themeColors.textColor, borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 },
-    modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.4)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 },
+    modalOverlay: { position: 'fixed', top: 0, bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: '430px', backgroundColor: 'rgba(0, 0, 0, 0.4)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 },
     modalContent: { backgroundColor: themeColors.cardBg, borderRadius: 16, padding: 20, maxWidth: 400, width: '100%', border: '1px solid ' + themeColors.borderColor, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.08)' },
     modalIconBg: { width: 56, height: 56, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' },
     modalSummary: { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.03)' : '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid ' + themeColors.borderColor, marginBottom: 12 },
@@ -644,7 +704,7 @@ function AppContent() {
     modalActions: { display: 'flex', gap: 10 },
     cancelBtn: { flex: 1, backgroundColor: '#10b981', color: '#ffffff', border: 'none', padding: '10px', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 },
     confirmBtn: { flex: 1, backgroundColor: '#ef4444', color: '#ffffff', border: 'none', padding: '10px', borderRadius: 8, fontWeight: 700, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 },
-    bottomNav: { position: 'fixed', bottom: 0, left: 0, right: 0, height: 60, backgroundColor: isDarkMode ? themeColors.cardBg : 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(10px)', display: 'flex', justifyContent: 'space-around', alignItems: 'center', zIndex: 90, borderTop: '1px solid ' + themeColors.borderColor, boxShadow: '0 -4px 12px rgba(0, 0, 0, 0.03)' },
+    bottomNav: { position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: '430px', height: 60, backgroundColor: isDarkMode ? themeColors.cardBg : 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(10px)', display: 'flex', justifyContent: 'space-around', alignItems: 'center', zIndex: 90, borderTop: '1px solid ' + themeColors.borderColor, boxShadow: '0 -4px 12px rgba(0, 0, 0, 0.03)' },
     navTab: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, background: 'none', border: 'none', color: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 11, cursor: 'pointer' },
     keypadNum: {
       backgroundColor: isDarkMode ? '#1e293b' : '#ffffff',
@@ -1005,9 +1065,11 @@ function AppContent() {
 
   if (!isDbReady) {
     return (
-      <div style={styles.centerContainer}>
-        <Activity className="animate-spin" size={36} color={themeColors.primary} />
-        <p style={{ marginTop: 14, color: '#475569', fontSize: 14 }}>Connecting to FundKosh MongoDB API Server...</p>
+      <div style={styles.desktopWrapper}>
+        <div style={{ ...styles.appShell, background: themeColors.bgGradient, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <Activity className="animate-spin" size={36} color={themeColors.primary} />
+          <p style={{ marginTop: 14, color: '#475569', fontSize: 14 }}>Connecting to FundKosh MongoDB API Server...</p>
+        </div>
       </div>
     );
   }
@@ -1015,7 +1077,8 @@ function AppContent() {
   // ONBOARDING PAGE
   if (!currentUser) {
     return (
-      <div style={{ ...styles.appShell, background: themeColors.bgGradient, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: 20, color: themeColors.bodyText }}>
+      <div style={styles.desktopWrapper}>
+        <div style={{ ...styles.appShell, background: themeColors.bgGradient, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: 20, color: themeColors.bodyText }}>
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <h1 style={{ ...styles.title, fontSize: 36, color: themeColors.primary }}>FundKosh</h1>
           <p style={{ ...styles.description, fontSize: 14, color: isDarkMode ? '#94a3b8' : '#475569' }}>Dynamic Cash Management & Sahayak Friction Engine</p>
@@ -1145,12 +1208,14 @@ function AppContent() {
             isBlueTheme={isBlueTheme}
           />
         )}
+        </div>
       </div>
     );
   }
 
   return (
-    <div style={{ ...styles.appShell, background: themeColors.bgGradient, color: themeColors.bodyText }}>
+    <div style={styles.desktopWrapper}>
+      <div style={{ ...styles.appShell, background: themeColors.bgGradient, color: themeColors.bodyText }}>
       <Header currentUser={currentUser} isBlueTheme={isBlueTheme} />
 
       <main style={styles.mainContent}>
@@ -1223,7 +1288,8 @@ function AppContent() {
         style={{
           position: 'fixed',
           bottom: 75,
-          right: 20,
+          left: '50%',
+          transform: 'translateX(150px)',
           width: 48,
           height: 48,
           borderRadius: '50%',
@@ -1324,23 +1390,23 @@ function AppContent() {
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {(voiceLang === 'EN' ? [
-                'What is my account balance?',
-                'Check my vault savings',
-                'What is my daily budget?',
-                'Show upcoming EMIs',
-                'Give investment advice'
+                'How does the Gullak (auto-save) work?',
+                'What is a Flexi Recurring Deposit (RD)?',
+                'Why is setting a daily budget helpful?',
+                'Explain how loan EMIs work',
+                'Explain how risk analysis works'
               ] : voiceLang === 'MR' ? [
-                'खाते में कितरा पिया है?',
-                'गुल्लक री बचत कतरी है?',
-                'म्हारो आज रो बजट कितरो है?',
-                'लोन री EMI दिखाओ',
-                'कमाई कटे निवेश करां?'
+                'गुल्लक (ऑटो-सेव) कैंया काम करे सा?',
+                'फ्लेक्सी आरडी (RD) कांई वेवे सा?',
+                'रोज रो बजट बणावण रा कांई फायदा है?',
+                'लोन री किस्त (EMI) कैंया काम करे?',
+                'जोखिम विश्लेषण या रिस्क स्कोर कांई है?'
               ] : [
-                'खाता बैलेंस कितना है?',
-                'गुल्लक में कितनी बचत है?',
-                'मेरा आज का बजट क्या है?',
-                'आने वाली EMI दिखाओ',
-                'पैसे कहां निवेश करें?'
+                'गुल्लक (ऑटो-सेव) कैसे काम करता है?',
+                'फ्लेक्सी आरडी (RD) क्या होता है?',
+                'दैनिक बजट बनाने के क्या फायदे हैं?',
+                'लोन की किस्त या ईएमआई कैसे काम करती है?',
+                'जोखिम विश्लेषण या रिस्क स्कोर क्या है?'
               ]).map((phrase, idx) => (
                 <button
                   key={idx}
@@ -1432,6 +1498,7 @@ function AppContent() {
         </button>
       </nav>
 
+      </div>
     </div>
   );
 }

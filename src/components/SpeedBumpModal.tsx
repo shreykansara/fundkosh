@@ -37,7 +37,7 @@ export const SpeedBumpModal: React.FC<SpeedBumpModalProps> = ({
   };
 
   const styles = {
-    modalOverlay: { position: 'fixed' as const, top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.4)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 },
+    modalOverlay: { position: 'fixed' as const, top: 0, bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: '430px', backgroundColor: 'rgba(0, 0, 0, 0.4)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 },
     modalContent: { backgroundColor: themeColors.cardBg, borderRadius: 16, padding: 20, maxWidth: 400, width: '100%', border: '1px solid ' + themeColors.borderColor, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.08)', color: themeColors.bodyText },
     modalIconBg: { width: 56, height: 56, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' },
     modalSummary: { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.03)' : '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid ' + themeColors.borderColor, marginBottom: 12 },

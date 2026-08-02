@@ -61,7 +61,8 @@ export const SandboxTray: React.FC<SandboxTrayProps> = ({
   return (
     <div style={{
       position: 'fixed',
-      top: 0, left: 0, right: 0, bottom: 0,
+      top: 0, bottom: 0, left: '50%', transform: 'translateX(-50%)',
+      width: '100%', maxWidth: '430px',
       backgroundColor: 'rgba(0, 0, 0, 0.4)',
       zIndex: 1000,
       display: 'flex',

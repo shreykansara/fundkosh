@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import Groq from 'groq-sdk';
 import { Entity } from './models/Entity.js';
 import { Transaction } from './models/Transaction.js';
 
@@ -12,17 +13,37 @@ const PORT = process.env.PORT || 5000;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/fundkosh';
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 let isMongoConnected = false;
+let isMongoConnecting = false;
+
+app.use(async (req, res, next) => {
+  if (!isMongoConnected && !isMongoConnecting) {
+    isMongoConnecting = true;
+    try {
+      await mongoose.connect(MONGODB_URI, { serverSelectionTimeoutMS: 5000 });
+      isMongoConnected = true;
+      console.log('✅ Connected to MongoDB on request');
+      await seedDatabaseIfEmpty();
+    } catch (err) {
+      isMongoConnected = false;
+      console.warn('⚠️ MongoDB connection failed on request:', err.message);
+    } finally {
+      isMongoConnecting = false;
+    }
+  }
+  next();
+});
 
 const SEED_ENTITIES = [
-  { 
-    id: 'usr_01', 
-    name: 'Ramesh Kumar', 
+  {
+    id: 'usr_01',
+    name: 'Ramesh Kumar',
     type: 0, // 0 = user
-    balance: 45000, 
-    upi_id: 'rameshkumar@upi', 
+    balance: 45000,
+    upi_id: 'rameshkumar@upi',
     phone: '+91 98290 12345',
     liabilities: [
       { id: 'liab_01', title: 'Bike Loan EMI (Hero FinCorp)', amount: 1800, period_days: 30, last_paid_date: new Date(Date.now() - 27 * 24 * 3600 * 1000).toISOString().split('T')[0], is_active: true },
@@ -38,12 +59,12 @@ const SEED_ENTITIES = [
       total_sweeps_count: 3
     }
   },
-  { 
-    id: 'usr_02', 
-    name: 'Sunita Devi', 
+  {
+    id: 'usr_02',
+    name: 'Sunita Devi',
     type: 0, // 0 = user
-    balance: 15000, 
-    upi_id: 'sunitadevi@upi', 
+    balance: 15000,
+    upi_id: 'sunitadevi@upi',
     phone: '+91 94140 54321',
     liabilities: [],
     vault: {
@@ -68,17 +89,17 @@ const SEED_ENTITIES = [
 function generateSeedTransactionsAndVault(baseDate) {
   const txs = [];
   const now = baseDate || new Date(Date.now() - 24 * 3600 * 1000);
-  
+
   const makeId = (prefix) => `${prefix}_${Math.floor(Date.now() / 1000)}_${Math.random().toString(36).substring(2, 7)}`;
 
   const ramesh = { upi: 'rameshkumar@upi', id: 'usr_01' };
   const sunita = { upi: 'sunitadevi@upi', id: 'usr_02' };
-  
+
   let vaultBalance = 0;
   let totalSwept = 0;
   let flexiRdBalance = 1450;
   let sweepsCount = 3;
-  
+
   for (let day = 30; day >= 0; day--) {
     const date = new Date(now.getTime() - day * 24 * 3600 * 1000);
     date.setHours(9 + Math.floor(Math.random() * 10), Math.floor(Math.random() * 60), 0, 0);
@@ -342,7 +363,7 @@ function generateSeedTransactionsAndVault(baseDate) {
         createdAt: teaTime
       });
     }
-    
+
     // Sunita's Independent Gig Payouts (days 8 and 22)
     if (day === 8 || day === 22) {
       const payoutAmt = 3200 + Math.floor(Math.random() * 800);
@@ -582,7 +603,7 @@ function generateSeedTransactionsAndVault(baseDate) {
 function getSeededData() {
   const baseDate = new Date();
   baseDate.setDate(baseDate.getDate() - 1); // Preceding date as of the moment it is reseeded
-  
+
   const initialData = generateSeedTransactionsAndVault(baseDate);
   const seeded = SEED_ENTITIES.map(ent => {
     const cloned = JSON.parse(JSON.stringify(ent));
@@ -700,7 +721,7 @@ app.get('/api/liabilities', async (req, res) => {
     }
     return res.json(list);
   }
-  
+
   // Memory fallback
   const users = memoryStore.entities.filter(e => e.type === 0);
   for (const u of users) {
@@ -837,7 +858,7 @@ app.post('/api/payment/update-status', async (req, res) => {
 
 app.post('/api/payment/transfer', async (req, res) => {
   const { senderUpi, receiverUpi, amount, roundUpAmount = 0 } = req.body;
-  
+
   if (isMongoConnected) {
     const sender = await Entity.findOne({ upi_id: senderUpi });
     const receiver = await Entity.findOne({ upi_id: receiverUpi });
@@ -950,85 +971,228 @@ app.post('/api/vault/manual-sweep', async (req, res) => {
   }
   res.json(user?.vault || {});
 });
-// Bhashini API CORS Proxy Endpoints
-app.post('/api/bhashini/pipeline', async (req, res) => {
+// Bhashini API CORS Proxy Endpoints (Direct REST API v2)
+app.post('/api/bhashini/pipeline', (req, res) => {
   const apiKey = process.env.BHASHINI_API_KEY;
-  const userId = process.env.BHASHINI_USER_ID;
-  const pipelineId = process.env.BHASHINI_PIPELINE_ID;
-
-  if (!apiKey || !userId || !pipelineId || apiKey.includes('your_bhashini_api_key_here')) {
+  if (!apiKey || apiKey.includes('your_bhashini_api_key_here')) {
     return res.status(400).json({ error: 'Bhashini API credentials not configured in backend .env file.' });
   }
+  res.json({ configured: true });
+});
+
+app.post('/api/bhashini/translate', async (req, res) => {
+  const apiKey = process.env.BHASHINI_API_KEY;
+  if (!apiKey || apiKey.includes('your_bhashini_api_key_here')) {
+    return res.status(400).json({ error: 'Bhashini API key not configured' });
+  }
+
+  const { text, sourceLang, targetLang } = req.body;
+  if (!text || !sourceLang || !targetLang) {
+    return res.status(400).json({ error: 'Missing text, sourceLang or targetLang' });
+  }
+
+  const langMap = {
+    'hi': 'Hindi',
+    'raj': 'Rajasthani',
+    'en': 'English'
+  };
+  const src = langMap[sourceLang] || sourceLang;
+  const tgt = langMap[targetLang] || targetLang;
 
   try {
-    const response = await fetch('https://meity-auth.ulcacognitive.org/ulca/apis/v0/model/getModelsPipeline', {
+    const response = await fetch('https://tts.bhashini.ai/v2/translate', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'ulcaApiKey': apiKey,
-        'userID': userId
+        'X-API-KEY': apiKey
       },
       body: JSON.stringify({
-        pipelineTasks: [
-          { taskType: 'asr' },
-          { taskType: 'translation' },
-          { taskType: 'tts' }
-        ],
-        pipelineRequestConfig: {
-          pipelineId: pipelineId
-        }
+        inputText: text,
+        inputLanguage: src,
+        outputLanguage: tgt
       })
     });
 
     if (!response.ok) {
       const errText = await response.text();
-      return res.status(response.status).json({ error: `Bhashini config failed: ${errText}` });
+      return res.status(response.status).json({ error: `Bhashini translate failed: ${errText}` });
     }
 
-    const data = await response.json();
-    res.json(data);
+    let translatedText = '';
+    const textVal = await response.text();
+    try {
+      const data = JSON.parse(textVal);
+      translatedText = data.translatedText || data.translation || data.text || (data.output && data.output[0] && data.output[0].target) || textVal;
+    } catch (e) {
+      translatedText = textVal;
+    }
+    res.json({ translatedText: translatedText.trim() });
   } catch (error) {
-    console.error('Bhashini Pipeline Proxy Error:', error);
+    console.error('Bhashini Translate Error:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-app.post('/api/bhashini/compute', async (req, res) => {
-  const { computeUrl, authorization, pipelineTasks, inputData } = req.body;
-  if (!computeUrl || !pipelineTasks || !inputData) {
-    return res.status(400).json({ error: 'Missing computeUrl, pipelineTasks or inputData' });
+app.post('/api/bhashini/synthesize', async (req, res) => {
+  const apiKey = process.env.BHASHINI_API_KEY;
+  if (!apiKey || apiKey.includes('your_bhashini_api_key_here')) {
+    return res.status(400).json({ error: 'Bhashini API key not configured' });
+  }
+
+  const { text, language, voiceName } = req.body;
+  if (!text || !language) {
+    return res.status(400).json({ error: 'Missing text or language' });
+  }
+
+  const langMap = {
+    'hi': 'Hindi',
+    'raj': 'Rajasthani',
+    'en': 'English'
+  };
+  const lang = langMap[language] || language;
+
+  try {
+    const response = await fetch('https://tts.bhashini.ai/v2/synthesize', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'audio/mpeg',
+        'X-API-KEY': apiKey
+      },
+      body: JSON.stringify({
+        text: text,
+        language: lang,
+        voiceName: voiceName || 'Female1'
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      return res.status(response.status).json({ error: `Bhashini synthesize failed: ${errText}` });
+    }
+
+    const audioBuffer = await response.arrayBuffer();
+    const base64Audio = Buffer.from(audioBuffer).toString('base64');
+    res.json({ audioContent: base64Audio });
+  } catch (error) {
+    console.error('Bhashini Synthesize Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/bhashini/asr', async (req, res) => {
+  const apiKey = process.env.BHASHINI_API_KEY;
+  if (!apiKey || apiKey.includes('your_bhashini_api_key_here')) {
+    return res.status(400).json({ error: 'Bhashini API key not configured' });
+  }
+
+  const { audioContent, language } = req.body;
+  if (!audioContent || !language) {
+    return res.status(400).json({ error: 'Missing audioContent or language' });
+  }
+
+  const langMap = {
+    'hi': 'Hindi',
+    'raj': 'Rajasthani',
+    'en': 'English'
+  };
+  const lang = langMap[language] || language;
+
+  try {
+    const audioBuffer = Buffer.from(audioContent, 'base64');
+    const formData = new FormData();
+    const audioBlob = new Blob([audioBuffer], { type: 'audio/webm' });
+    formData.append('file', audioBlob, 'audio.webm');
+    formData.append('language', lang);
+
+    const response = await fetch('https://tts.bhashini.ai/v2/asr', {
+      method: 'POST',
+      headers: {
+        'X-API-KEY': apiKey
+      },
+      body: formData
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      return res.status(response.status).json({ error: `Bhashini ASR failed: ${errText}` });
+    }
+
+    let transcribedText = '';
+    const textVal = await response.text();
+    try {
+      const data = JSON.parse(textVal);
+      transcribedText = data.text || data.transcription || data.transcript || (data.output && data.output[0] && data.output[0].source) || textVal;
+    } catch (e) {
+      transcribedText = textVal;
+    }
+    res.json({ text: transcribedText.trim() });
+  } catch (error) {
+    console.error('Bhashini ASR Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+app.post('/api/groq/chat', async (req, res) => {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey || apiKey.includes('your_groq_api_key_here')) {
+    return res.status(400).json({ error: 'Groq API key not configured' });
+  }
+
+  const { message } = req.body;
+  if (!message) {
+    return res.status(400).json({ error: 'Missing message parameter' });
   }
 
   try {
-    const headers = { 'Content-Type': 'application/json' };
-    if (authorization) {
-      headers['Authorization'] = authorization;
-    }
+    const groq = new Groq({ apiKey });
+    const chatCompletion = await groq.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
+      messages: [
+        {
+          role: 'system',
+          content: `You are the FundKosh Sahayak Voice Assistant.
+You are an informational financial assistant designed to explain general financial concepts, terms, and digital banking features in simple, jargon-free words.
 
-    const response = await fetch(computeUrl, {
-      method: 'POST',
-      headers: headers,
-      body: JSON.stringify({
-        pipelineTasks,
-        inputData
-      })
+STRICT FORMATTING & STYLE DIRECTIONS:
+- Give very short responses (maximum 2 to 3 sentences).
+- Avoid any heavy financial jargons; explain concepts in extremely simple, everyday words.
+- DO NOT use asterisks (*), hash symbols (#), dashes (-), markdown bolding, or lists/bullets to format the response. Output only plain, conversational text.
+
+STRICT PRIVACY GUARDRAILS:
+- You DO NOT have access to the user's personal financial details, account balance, daily budget status, transactions, upcoming EMIs, or other account information.
+- If the user asks about their personal balance, budget status, EMIs, or any personal account questions, you MUST clearly state: "I do not have access to this information."
+- Do not make up or guess personal details.
+
+STRICT COMPLIANCE GUARDRAILS:
+- Do NOT provide personalized financial advice, investment recommendations, or stock/mutual fund suggestions.
+- Keep all answers simple, jargon-free, and educational.
+- Answer ONLY general, educational questions that are finance-based. If a question is not about general financial concepts, features, or terms, you must clearly state: "I do not have access to this information."`
+        },
+        {
+          role: 'user',
+          content: message
+        }
+      ],
+      temperature: 0.1,
+      max_tokens: 256
     });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      return res.status(response.status).json({ error: `Bhashini compute failed: ${errText}` });
-    }
-
-    const data = await response.json();
-    res.json(data);
+    const answer = chatCompletion.choices?.[0]?.message?.content || '';
+    res.json({ response: answer.trim() });
   } catch (error) {
-    console.error('Bhashini Compute Proxy Error:', error);
+    console.error('Groq Chat Proxy Error:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
 
-app.listen(PORT, () => {
-  console.log(`🚀 FundKosh Express API Server running on http://localhost:${PORT}`);
-  initMongo();
-});
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`🚀 FundKosh Express API Server running on http://localhost:${PORT}`);
+    // Connection is lazily initialized on-demand via middleware
+  });
+}
+
+export default app;
