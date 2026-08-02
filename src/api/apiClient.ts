@@ -1,8 +1,7 @@
 import { Entity, Liability, Transaction, VaultState, TransactionStatus } from '../domain/models';
+import { getApiBase } from './config';
 
-const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-  ? 'http://localhost:5000/api'
-  : '/api';
+const API_BASE = getApiBase();
 
 export const apiClient = {
   async checkHealth(): Promise<{ status: string; mongoConnected: boolean }> {

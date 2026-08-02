@@ -71,6 +71,7 @@ import {
 
 import { ReinforcementPredictor, getCurrentContext, PredictionResult } from './engine/ReinforcementModel';
 import { bhashiniClient, BhashiniConfig } from './api/bhashiniClient';
+import { getGroqApiUrl } from './api/config';
 
 import { Header } from './components/Header';
 import { BottomNav } from './components/BottomNav';
@@ -432,10 +433,7 @@ function AppContent() {
       }
       
       // Phase 2: Send to Groq API
-      const groqApiUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-        ? 'http://localhost:5000/api/groq/chat'
-        : '/api/groq/chat';
-      const groqRes = await fetch(groqApiUrl, {
+      const groqRes = await fetch(getGroqApiUrl(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: englishQuery })
