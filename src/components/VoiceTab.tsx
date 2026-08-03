@@ -322,7 +322,10 @@ export const VoiceTab: React.FC<VoiceTabProps> = ({
             <input
               type="text"
               value={transcriptInput}
-              onChange={(e) => setTranscriptInput(e.target.value)}
+              onChange={(e) => {
+                const cleaned = e.target.value.replace(/<[^>]*>/g, '');
+                setTranscriptInput(cleaned);
+              }}
               placeholder="Type query (e.g. check balance)"
               style={{
                 ...styles.input,

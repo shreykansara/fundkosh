@@ -723,7 +723,7 @@ function AppContent() {
 
   // Load Data & Run App-Launch Prediction
   const refreshAppData = async () => {
-    const activeUpi = currentUser?.upi_id || senderUpi;
+    const activeUpi = currentUser?.upi_id || (isDbReady ? '' : senderUpi);
     const [health, e, l, t, v] = await Promise.all([
       apiClient.checkHealth(),
       apiClient.getEntities(),
@@ -732,28 +732,47 @@ function AppContent() {
       apiClient.getVault(activeUpi)
     ]);
 
-    setMongoConnected(health.mongoConnected);
-    setEntities(e);
-    setLiabilities(l);
-    setTransactions(t);
+    if (health.mongoConnected !== mongoConnected) {
+      setMongoConnected(health.mongoConnected);
+    }
+    if (JSON.stringify(e) !== JSON.stringify(entities)) {
+      setEntities(e);
+    }
+    if (JSON.stringify(l) !== JSON.stringify(liabilities)) {
+      setLiabilities(l);
+    }
+    if (JSON.stringify(t) !== JSON.stringify(transactions)) {
+      setTransactions(t);
+    }
     
     const updatedUser = e.find(ent => ent.upi_id === activeUpi);
     if (updatedUser) {
-      setCurrentUser(updatedUser);
-      if (updatedUser.vault) {
-        setVaultData(updatedUser.vault);
-      } else {
-        setVaultData(v);
+      if (!currentUser || 
+          currentUser.id !== updatedUser.id || 
+          currentUser.balance !== updatedUser.balance || 
+          JSON.stringify(currentUser.liabilities) !== JSON.stringify(updatedUser.liabilities) ||
+          JSON.stringify(currentUser.vault) !== JSON.stringify(updatedUser.vault)) {
+        setCurrentUser(updatedUser);
+      }
+      const targetVault = updatedUser.vault || v;
+      if (JSON.stringify(targetVault) !== JSON.stringify(vaultData)) {
+        setVaultData(targetVault);
       }
     } else {
-      setVaultData(v);
+      if (JSON.stringify(v) !== JSON.stringify(vaultData)) {
+        setVaultData(v);
+      }
     }
-    setIsDbReady(true);
+    if (!isDbReady) {
+      setIsDbReady(true);
+    }
 
     if (activeUpi) {
       // Proactive Launch State Prediction
       const state = await statePredictor.predictUserState(activeUpi);
-      setUserState(state);
+      if (JSON.stringify(state) !== JSON.stringify(userState)) {
+        setUserState(state);
+      }
 
       const bMetrics = await budgetCalculator.calculateMetrics(
         activeUpi, 
@@ -761,22 +780,25 @@ function AppContent() {
         weather, 
         eventVector
       );
-      setBudgetMetrics(bMetrics);
+      if (JSON.stringify(bMetrics) !== JSON.stringify(budgetMetrics)) {
+        setBudgetMetrics(bMetrics);
+      }
 
       // AI Reinforcement Launch Prediction
       const context = getCurrentContext();
       const prediction = reinforcementPredictor.predict(context);
-      setActivePrediction(prediction);
+      if (JSON.stringify(prediction) !== JSON.stringify(activePrediction)) {
+        setActivePrediction(prediction);
+      }
 
-      // Decides whether the UI theme would be GREEN, RED, or AMBER:
-      // 1. GREEN: predicted category is 'essential' (usual time for essential payments)
-      // 2. AMBER: predicted category is 'impulsive' (not usual time), but remainingDailyBudget > 0
-      // 3. RED: predicted category is 'impulsive' and remainingDailyBudget <= 0 (high risk of daily budget exceeded)
+      // Decides whether the UI theme would be GREEN, RED, or AMBER
       let mappedThemeState: RiskThemeState = 'GREEN';
       if (prediction.category === 'impulsive') {
         mappedThemeState = bMetrics.remainingDailyBudget > 0 ? 'AMBER' : 'RED';
       }
-      setThemeState(mappedThemeState);
+      if (mappedThemeState !== themeState) {
+        setThemeState(mappedThemeState);
+      }
     }
   };
 
@@ -788,6 +810,8 @@ function AppContent() {
     if (currentUser) {
       // Sync sender UPI when profile is chosen or changed
       setSenderUpi(currentUser.upi_id);
+    } else {
+      setSenderUpi('');
     }
   }, [currentUser]);
 
@@ -842,6 +866,10 @@ function AppContent() {
   const handleSendPayment = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (amount <= 0) return;
+    if (currentUser && amount > currentUser.balance) {
+      alert(`Payment amount exceeds your available balance (₹${currentUser.balance.toLocaleString()}).`);
+      return;
+    }
     setStatusMessage(null);
 
     try {

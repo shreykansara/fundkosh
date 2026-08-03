@@ -387,7 +387,12 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 <input 
                   type="text" 
                   value={verificationQuery}
-                  onChange={e => setVerificationQuery(e.target.value)}
+                  onChange={e => {
+                    const cleaned = paymentMode === 'PHONE'
+                      ? e.target.value.replace(/[^0-9 +\-]/g, '')
+                      : e.target.value.replace(/[^a-zA-Z0-9.\-_@]/g, '');
+                    setVerificationQuery(cleaned);
+                  }}
                   placeholder={paymentMode === 'PHONE' ? 'e.g. +91 94140 54321' : 'e.g. sunitadevi@upi'}
                   style={styles.input}
                   onKeyDown={e => {
@@ -687,28 +692,40 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 {/* Currency Amount Display */}
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', margin: '8px 0 12px 0', gap: 6 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: 32, fontWeight: 800, color: themeColors.primary }}>₹</span>
+                    <span style={{ fontSize: 32, fontWeight: 800, color: amount > currentUser.balance ? '#ef4444' : themeColors.primary }}>₹</span>
                     <input 
-                      type="number" 
+                      type="text" 
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                       value={amount === 0 ? '' : amount} 
-                      onChange={e => setAmount(Number(e.target.value))}
+                      onChange={e => {
+                        const val = e.target.value.replace(/[^0-9]/g, '');
+                        setAmount(val === '' ? 0 : Number(val));
+                      }}
                       style={{
                         border: 'none',
-                        borderBottom: '2px solid #cbd5e1',
+                        borderBottom: amount > currentUser.balance ? '2px solid #ef4444' : '2px solid #cbd5e1',
                         fontSize: 36,
                         fontWeight: 800,
-                        color: themeColors.textColor,
+                        color: amount > currentUser.balance ? '#ef4444' : themeColors.textColor,
                         width: '160px',
                         textAlign: 'center',
                         outline: 'none',
                         backgroundColor: 'transparent'
                       }}
-                      min={1}
                       required
                       placeholder="0"
                     />
                   </div>
-                  <span style={{ fontSize: 11, color: isDarkMode ? '#cbd5e1' : '#64748b', fontWeight: 600 }}>Enter amount you want to transfer</span>
+                  {amount > currentUser.balance ? (
+                    <span style={{ fontSize: 11, color: '#ef4444', fontWeight: 700 }}>
+                      ⚠️ Amount exceeds available balance (₹{currentUser.balance.toLocaleString()})
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: 11, color: isDarkMode ? '#cbd5e1' : '#64748b', fontWeight: 600 }}>
+                      Enter amount you want to transfer
+                    </span>
+                  )}
                 </div>
 
                 {/* Select note category selection */}
@@ -849,14 +866,21 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
               <button 
                 type="submit" 
+                disabled={amount > currentUser.balance || amount <= 0}
                 style={{ 
                   ...styles.submitBtn, 
-                  backgroundColor: themeColors.primary, 
+                  backgroundColor: (amount > currentUser.balance || amount <= 0) 
+                    ? (isDarkMode ? '#334155' : '#cbd5e1') 
+                    : themeColors.primary, 
+                  color: (amount > currentUser.balance || amount <= 0) 
+                    ? (isDarkMode ? '#64748b' : '#94a3b8') 
+                    : '#ffffff',
                   width: '100%', 
                   fontSize: 15, 
                   padding: 14, 
                   marginTop: 'auto',
-                  fontWeight: 700
+                  fontWeight: 700,
+                  cursor: (amount > currentUser.balance || amount <= 0) ? 'not-allowed' : 'pointer'
                 }}
               >
                 Proceed to Pay ➔

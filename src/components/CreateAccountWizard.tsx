@@ -140,7 +140,10 @@ export const CreateAccountWizard: React.FC<CreateAccountWizardProps> = ({
             <input 
               type="text" 
               value={newUserName}
-              onChange={e => setNewUserName(e.target.value)}
+              onChange={e => {
+                const val = e.target.value.replace(/[^a-zA-Z .]/g, '');
+                setNewUserName(val);
+              }}
               placeholder="e.g. Rajesh Sharma"
               style={styles.input}
               required
@@ -152,9 +155,18 @@ export const CreateAccountWizard: React.FC<CreateAccountWizardProps> = ({
             <input 
               type="text" 
               value={newUserPhone}
-              onChange={e => setNewUserPhone(e.target.value)}
-              placeholder="e.g. 98290 55667"
-              style={styles.input}
+              onChange={e => {
+                const val = e.target.value.replace(/[^0-9]/g, '').slice(0, 10);
+                setNewUserPhone(val);
+              }}
+              placeholder="e.g. 9829055667"
+              maxLength={10}
+              disabled={otpSent}
+              style={{
+                ...styles.input,
+                opacity: otpSent ? 0.6 : 1,
+                cursor: otpSent ? 'not-allowed' : 'text'
+              }}
               required
             />
           </div>
@@ -179,11 +191,17 @@ export const CreateAccountWizard: React.FC<CreateAccountWizardProps> = ({
               <input 
                 type="text" 
                 value={otpValue}
-                onChange={e => setOtpValue(e.target.value)}
+                onChange={e => {
+                  const val = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
+                  setOtpValue(val);
+                }}
                 placeholder="e.g. 1234"
                 maxLength={4}
                 style={{ ...styles.input, textAlign: 'center', letterSpacing: '4px', fontWeight: 'bold' }}
               />
+              <span style={{ fontSize: 10, color: isDarkMode ? '#94a3b8' : '#64748b', marginTop: 2, textAlign: 'center' }}>
+                (For demo, you can enter any 4-digit number, e.g. 1234)
+              </span>
             </div>
           )}
 
@@ -211,12 +229,17 @@ export const CreateAccountWizard: React.FC<CreateAccountWizardProps> = ({
               {!otpSent ? (
                 <button
                   onClick={() => {
-                    if (!newUserName.trim() || !newUserPhone.trim()) {
-                      alert('Please fill in your name and phone number.');
+                    if (!newUserName.trim()) {
+                      alert('Please fill in your name.');
+                      return;
+                    }
+                    const cleanPhone = newUserPhone.replace(/[^0-9]/g, '');
+                    if (cleanPhone.length !== 10) {
+                      alert('Please enter a valid 10-digit phone number.');
                       return;
                     }
                     setOtpSent(true);
-                    setOtpValue('1234'); // Auto fill verification OTP value
+                    setOtpValue(''); // User will enter OTP manually
                   }}
                   style={{ ...styles.submitBtn, backgroundColor: themeColors.primary, width: '100%' }}
                 >
@@ -225,6 +248,11 @@ export const CreateAccountWizard: React.FC<CreateAccountWizardProps> = ({
               ) : (
                 <button
                   onClick={() => {
+                    const cleanPhone = newUserPhone.replace(/[^0-9]/g, '');
+                    if (cleanPhone.length !== 10) {
+                      alert('Please enter a valid 10-digit phone number.');
+                      return;
+                    }
                     if (otpValue.length < 4) {
                       alert('Please enter the 4-digit OTP.');
                       return;
@@ -253,12 +281,16 @@ export const CreateAccountWizard: React.FC<CreateAccountWizardProps> = ({
           <div style={styles.formGroup}>
             <label style={styles.label}>Average Monthly Income (₹)</label>
             <input 
-              type="number" 
+              type="text" 
+              inputMode="numeric"
+              pattern="[0-9]*"
               value={newUserIncome === 0 ? '' : newUserIncome}
-              onChange={e => setNewUserIncome(Number(e.target.value))}
+              onChange={e => {
+                const val = e.target.value.replace(/[^0-9]/g, '');
+                setNewUserIncome(val === '' ? 0 : Number(val));
+              }}
               placeholder="e.g. 35000"
               style={styles.input}
-              min={1000}
               required
             />
           </div>
@@ -287,8 +319,15 @@ export const CreateAccountWizard: React.FC<CreateAccountWizardProps> = ({
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 340, overflowY: 'auto', paddingRight: 4 }}>
-            {customLiabilities.map((liab, idx) => (
-              <div key={idx} style={{ 
+            {customLiabilities.map((liab, idx) => {
+              const todayObj = new Date();
+              const todayStr = todayObj.toISOString().split('T')[0];
+              const minDateObj = new Date();
+              minDateObj.setDate(minDateObj.getDate() - (liab.period_days || 0));
+              const minStr = minDateObj.toISOString().split('T')[0];
+              
+              return (
+                <div key={idx} style={{ 
                 backgroundColor: isDarkMode ? '#1e293b' : '#f8fafc', 
                 borderRadius: 12, 
                 padding: 12, 
@@ -329,8 +368,9 @@ export const CreateAccountWizard: React.FC<CreateAccountWizardProps> = ({
                       type="text" 
                       value={liab.title}
                       onChange={e => {
+                        const val = e.target.value.replace(/[^a-zA-Z0-9 \-.]/g, '');
                         const updated = [...customLiabilities];
-                        updated[idx].title = e.target.value;
+                        updated[idx].title = val;
                         setCustomLiabilities(updated);
                       }}
                       placeholder="e.g. Rent"
@@ -340,15 +380,19 @@ export const CreateAccountWizard: React.FC<CreateAccountWizardProps> = ({
                   <div style={{ width: '100px', display: 'flex', flexDirection: 'column', gap: 2 }}>
                     <label style={{ fontSize: 10, color: isDarkMode ? '#cbd5e1' : '#475569', fontWeight: 600 }}>Amount (₹)</label>
                     <input 
-                      type="number" 
+                      type="text" 
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                       value={liab.amount === 0 ? '' : liab.amount}
                       onChange={e => {
+                        const val = e.target.value.replace(/[^0-9]/g, '');
                         const updated = [...customLiabilities];
-                        updated[idx].amount = Number(e.target.value);
+                        updated[idx].amount = val === '' ? 0 : Number(val);
                         setCustomLiabilities(updated);
                       }}
                       placeholder="Amount"
                       style={{ ...styles.input, padding: '8px' }}
+                      required
                     />
                   </div>
                 </div>
@@ -372,6 +416,8 @@ export const CreateAccountWizard: React.FC<CreateAccountWizardProps> = ({
                     <label style={{ fontSize: 10, color: isDarkMode ? '#cbd5e1' : '#475569', fontWeight: 600 }}>Last Paid Date</label>
                     <input 
                       type="date" 
+                      min={minStr}
+                      max={todayStr}
                       value={liab.last_paid_date}
                       onChange={e => {
                         const updated = [...customLiabilities];
@@ -383,7 +429,8 @@ export const CreateAccountWizard: React.FC<CreateAccountWizardProps> = ({
                   </div>
                 </div>
               </div>
-            ))}
+            );
+          })}
           </div>
 
           <button
@@ -405,7 +452,52 @@ export const CreateAccountWizard: React.FC<CreateAccountWizardProps> = ({
           </button>
 
           <button
-            onClick={() => setWizardStep(4)}
+            onClick={() => {
+              for (let i = 0; i < customLiabilities.length; i++) {
+                const liab = customLiabilities[i];
+                const hasTitle = !!liab.title.trim();
+                const hasAmount = liab.amount > 0;
+                
+                if (hasTitle || hasAmount) {
+                  if (!hasTitle) {
+                    alert(`Please enter a title for expense #${i + 1}`);
+                    return;
+                  }
+                  if (!hasAmount) {
+                    alert(`Please enter a valid amount for "${liab.title}"`);
+                    return;
+                  }
+                  if (liab.period_days <= 0) {
+                    alert(`Please enter a valid period in days for "${liab.title}"`);
+                    return;
+                  }
+                  if (!liab.last_paid_date) {
+                    alert(`Please enter a last paid date for "${liab.title}"`);
+                    return;
+                  }
+                  
+                  const parts = liab.last_paid_date.split('-');
+                  const lastPaid = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+                  
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  
+                  if (lastPaid > today) {
+                    alert(`Last Paid Date for "${liab.title}" cannot be in the future.`);
+                    return;
+                  }
+                  
+                  const diffTime = today.getTime() - lastPaid.getTime();
+                  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+                  
+                  if (diffDays > liab.period_days) {
+                    alert(`Last Paid Date for "${liab.title}" must be within the last ${liab.period_days} days.`);
+                    return;
+                  }
+                }
+              }
+              setWizardStep(4);
+            }}
             style={{ ...styles.submitBtn, backgroundColor: themeColors.primary, width: '100%', marginTop: 12 }}
           >
             Next: Setup Flexi-RD ➔
